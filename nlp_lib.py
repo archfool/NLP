@@ -8,7 +8,6 @@ Created on Mon Mar 11 08:53:30 2019
 import jieba
 import jieba.posseg as psg
 
-#path_nlp = r'E:\\MachineLearning\\data\\nlp\\'
 
 #加载停用词表
 def get_stopwords(path_data=None):
