@@ -8,7 +8,6 @@ Created on Fri May  3 16:48:57 2019
 import tensorflow as tf
 import numpy as np
 import math
-from nn_model_crf import crf_log_likelihood,viterbi_decode
 
 #mlp模型
 def mlp(x,keep_prob,activation_fun,layer_num,dim):
@@ -116,85 +115,6 @@ def bilstm_crf(x,keep_prob,dim_lstm,label_num,word2vec=None,vocab_num=None,w2v_d
         transition_score_matrix = tf.get_variable(name='transition_score_matrix',\
                                     trainable=True,shape=[label_num,label_num])
     return layer_output,seq_len,transition_score_matrix
-
-'''
-def bilstm_crf_loss_fun(bilstm_output,y,seq_len,label_num):
-    with tf.variable_scope('crf_layer'):
-        #转移概率transition_probability和发射概率emission_probability
-        seq_score = crf_sequence_score(inputs=bilstm_output,)
-        
-        
-        
-#  sequence_scores = crf_sequence_score(inputs, tag_indices, sequence_lengths,
-#                                       transition_params)
-#  log_norm = crf_log_norm(inputs, sequence_lengths, transition_params)
-#  log_likelihood = sequence_scores - log_norm
-#  return log_likelihood, transition_params
-        log_likelihood, transition_score_matrix = tf.contrib.crf.crf_log_likelihood(inputs=layer_output[3],
-#                                                               tag_indices=tf.cast(y,tf.int32),
-                                                               tag_indices=y,
-                                                               sequence_lengths=seq_len)
-        #loss = -tf.reduce_mean(log_likelihood)
-        layer_output.append(log_likelihood)
-    return layer_output
-            log_likelihood, self.transition_params = crf_log_likelihood(inputs=self.logits,
-                                                                   tag_indices=self.labels,
-                                                                   sequence_lengths=self.sequence_lengths)
-            self.loss = -tf.reduce_mean(log_likelihood)
-'''
-
-'''        
-class CrfForwardRnnCell(tf.nn.rnn_cell.RNNCell):
-  """Computes the alpha values in a linear-chain CRF.
-  See http://www.cs.columbia.edu/~mcollins/fb.pdf for reference.
-  """
-  def __init__(self, transition_score_matrix):
-    """Initialize the CrfForwardRnnCell.
-    Args:
-      transition_score_matrix: A [label_num, label_num] matrix of binary potentials.
-          This matrix is expanded into a [1, label_num, label_num] in preparation
-          for the broadcast summation occurring within the cell.
-    """
-    self._transition_score_matrix = tf.expand_dims(transition_score_matrix, 0)
-    self._label_num = transition_score_matrix.get_shape()[0].value
-
-  @property
-  def state_size(self):
-    return self._label_num
-
-  @property
-  def output_size(self):
-    return self._label_num
-
-  def __call__(self, inputs, state, scope=None):
-    """Build the CrfForwardRnnCell.
-    Args:
-      inputs: A [batch_size, label_num] matrix of unary potentials.
-      state: A [batch_size, label_num] matrix containing the previous alpha
-          values.
-      scope: Unused variable scope of this cell.
-    Returns:
-      new_alphas, new_alphas: A pair of [batch_size, label_num] matrices
-          values containing the new alpha values.
-    """
-    emission_score = inputs
-    old_alphas = state
-    old_alphas = tf.expand_dims(old_alphas, 2)
-
-    # This addition op broadcasts self._transition_score_matrix along the zeroth
-    # dimension and old_alphas along the second dimension. This performs the
-    # multiplication of previous alpha values and the current binary potentials
-    # in log space.
-    transition_scores = old_alphas + self._transition_score_matrix
-    new_alphas = emission_score + tf.reduce_logsumexp(transition_scores, [1])
-
-    # Both the state and the output of this RNN cell contain the alphas values.
-    # The output value is currently unused and simply satisfies the RNN API.
-    # This could be useful in the future if we need to compute marginal
-    # probabilities, which would require the accumulated alpha values at every
-    # time step.
-    return new_alphas, new_alphas
-'''
 
 #FM模型
 def fm(x,dim_x,dim_y,dim_lv):

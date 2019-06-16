@@ -19,8 +19,8 @@ logging.basicConfig(level=logging.WARNING,format="[%(asctime)s] %(message)s",dat
 from sklearn.model_selection import train_test_split
 from neural_network import neural_network
 
-path_nlp = r'E:\\MachineLearning\\data\\nlp\\'
-path_nlp_ner = path_nlp+r'ner\\'
+path_nlp = r'.\\data\\'
+path_ner = path_nlp+r'ner\\'
 dim_lstm = 128
 learning_rate = 0.001
 batch_size = 1024
@@ -181,9 +181,9 @@ def word2id_build(word2id_path, corpus_path, min_count):
 
 if __name__=='__main__':
     if not 'x' in locals():
-        word2id = read_word2id_dict(path_nlp_ner+r'word2id.pkl')
+        word2id = read_word2id_dict(path_ner+r'word2id.pkl')
         w2v = random_w2v_embedding(word2id,100)
-        x,y,max_seq_len = train_data_process(path_nlp_ner+r'train_data',word2id,label2id)
+        x,y,max_seq_len = train_data_process(path_ner+r'train_data',word2id,label2id)
     random_seed = int(time.time())
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.05, random_state=random_seed)
     model = neural_network(x_train,y_train,task_type='classification',\
@@ -198,7 +198,7 @@ if __name__=='__main__':
                            hyper_parameter={'learning_rate':learning_rate,\
                                             'batch_size':batch_size,\
                                             'early_stop_rounds':150},\
-                           path_data=path_nlp_ner)
+                           path_data=path_ner)
     #训练
     if False:
         model.train(transfer_learning=False,built_in_test=True,x_test=x_test,y_test=y_test)
@@ -211,7 +211,7 @@ if __name__=='__main__':
              '福宏小区','水涧新村','省工商银行宿舍']
         word_label_list_1 = ner_predict(model,x_tmp,word2id,label2id,max_len=None,do_word2id=True)
         #模式二（不常用）
-        word_label_list_2 = ner_predict(model,x_test,word2id,label2id,max_len=max_seq_len,do_word2id=False)
+        #word_label_list_2 = ner_predict(model,x_test,word2id,label2id,max_len=max_seq_len,do_word2id=False)
     #导出模型参数
     if False:
         model.params_output()

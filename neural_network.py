@@ -14,6 +14,7 @@ import math
 import os
 import gc
 import nn_model
+import nn_lib
 from sklearn.preprocessing import StandardScaler
 import logging
 logging.basicConfig(level=logging.WARNING,format="[%(asctime)s] %(message)s",datefmt="%Y-%m-%d %H:%M:%S",)
@@ -223,7 +224,7 @@ class neural_network(object):
             loss=tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=model_out,labels=self.y_ph))
         elif self.loss_fun_type=='bilstm_crf':
             log_likelihood, self.transition_score_matrix =\
-            nn_model.crf_log_likelihood(inputs=self.layer_output[-1],\
+            nn_lib.crf_log_likelihood(inputs=self.layer_output[-1],\
                                         tag_indices=self.y_ph,\
                                         sequence_lengths=self.seq_len,\
                                         transition_params=self.transition_score_matrix)
@@ -408,9 +409,10 @@ class neural_network(object):
         
         #构建模型
         out = self.creat_model()
-        
+        print('\n=================\n')
         #初始化模型存取器
-        model_path = tf.train.latest_checkpoint(self.path_data+'model_save\\')
+        model_path = tf.train.latest_checkpoint(self.path_data+r'model_save\\')
+        print('\n=================\n')
 #        model_path = tf.train.latest_checkpoint(os.path.join(self.path_data,'model_save'))
         #saver = tf.train.import_meta_graph(model_path+u'.meta')
         saver = tf.train.Saver()
@@ -427,7 +429,7 @@ class neural_network(object):
                 transition_score_matrix = np.array(sess.run(self.transition_score_matrix))
                 label_list = []
                 for logit, seq_len in zip(logits, seq_lens):
-                    viterbi_seq, _ = nn_model.viterbi_decode(logit[:seq_len], transition_score_matrix)
+                    viterbi_seq, _ = nn_lib.viterbi_decode(logit[:seq_len], transition_score_matrix)
                     label_list.append(viterbi_seq)
                 result = label_list
             #打印变量
