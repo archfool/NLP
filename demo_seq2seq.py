@@ -82,6 +82,6 @@ def data_pre_process():
 
 if __name__ == "__main__":
     if True:
-        data_pre_process()
+        word_zh,word_en = data_pre_process()
 
 

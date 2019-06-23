@@ -189,10 +189,10 @@ if __name__=='__main__':
     model = neural_network(x_train,y_train,task_type='classification',\
                            model_type='bilstm_crf',loss_fun_type='bilstm_crf',\
                            eval_score_type='bilstm_crf_loss',optimizer_type='Adam',\
-                           model_parameter={'word2vec':None,\
+                           model_parameter={'word_embd_pretrain':None,\
                                             'keep_prob':0.95,\
                                             'vocab_num':3905,\
-                                            'w2v_dim':100,\
+                                            'word_embd_dim':100,\
                                             'label_num':len(label2id),\
                                             'dim_lstm':dim_lstm},\
                            hyper_parameter={'learning_rate':learning_rate,\
@@ -200,10 +200,10 @@ if __name__=='__main__':
                                             'early_stop_rounds':150},\
                            path_data=path_ner)
     #训练
-    if False:
+    if True:
         model.train(transfer_learning=False,built_in_test=True,x_test=x_test,y_test=y_test)
     #预测
-    if True:
+    if False:
         #模式一（常用）
         x_tmp = ['五一广场','毛泽东雕像','万科小区','福州市一建宿舍','新华书店','福建新华发行集团',\
              '火巷里','工商银行宿舍阳光假日公寓','福建省二轻宿舍','新侨联广场',\

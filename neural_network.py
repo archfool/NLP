@@ -14,10 +14,10 @@ import math
 import os
 import gc
 import nn_model
-import nn_lib
 from sklearn.preprocessing import StandardScaler
 import logging
 logging.basicConfig(level=logging.WARNING,format="[%(asctime)s] %(message)s",datefmt="%Y-%m-%d %H:%M:%S",)
+import nn_lib
 
 class neural_network(object):
     '''========================================================================'''
@@ -204,6 +204,53 @@ class neural_network(object):
             print('Train model end!')
         return
     
+    '''========================================================================'''
+    '''==============================predict part=============================='''
+    '''========================================================================'''
+    #预测
+    def predict(self, x):
+        #规整特征数据
+        x,_ = self.init_data(x=x)
+        
+        #重置tf的向量空间
+        tf.reset_default_graph()
+        
+        #构建模型
+        out = self.creat_model()
+        print('\n=================\n')
+        #初始化模型存取器
+        model_path = tf.train.latest_checkpoint(self.path_data+r'model_save\\')
+        print('\n=================\n')
+#        model_path = tf.train.latest_checkpoint(os.path.join(self.path_data,'model_save'))
+        #saver = tf.train.import_meta_graph(model_path+u'.meta')
+        saver = tf.train.Saver()
+        
+        with tf.Session() as sess:
+            #读取模型参数
+            saver.restore(sess, model_path)
+            #进行预测
+            feed_dict = self.get_feed_dict({self.x_ph:x}, predict=True)
+            result = sess.run(out,feed_dict=feed_dict)
+            if self.model_type=='bilstm_crf':
+                logits = np.array(result)
+                seq_lens = np.array(sess.run(self.seq_len,feed_dict=feed_dict))
+                transition_score_matrix = np.array(sess.run(self.transition_score_matrix))
+                label_list = []
+                for logit, seq_len in zip(logits, seq_lens):
+                    viterbi_seq, _ = nn_lib.viterbi_decode(logit[:seq_len], transition_score_matrix)
+                    label_list.append(viterbi_seq)
+                result = label_list
+            #打印变量
+            if False:
+                for var in tf.global_variables():
+                    print(var)
+                    var_value=sess.run(var)
+                    print(var_value)
+        return result
+    
+    '''========================================================================'''
+    '''=============================evaluate part=============================='''
+    '''========================================================================'''
     #配置损失函数类型
     def init_loss_fun_type(self, loss_fun_type):
         if not loss_fun_type:
@@ -397,50 +444,6 @@ class neural_network(object):
         return optimize_step
     
     '''========================================================================'''
-    '''==============================predict part=============================='''
-    '''========================================================================'''
-    #预测
-    def predict(self, x):
-        #规整特征数据
-        x,_ = self.init_data(x=x)
-        
-        #重置tf的向量空间
-        tf.reset_default_graph()
-        
-        #构建模型
-        out = self.creat_model()
-        print('\n=================\n')
-        #初始化模型存取器
-        model_path = tf.train.latest_checkpoint(self.path_data+r'model_save\\')
-        print('\n=================\n')
-#        model_path = tf.train.latest_checkpoint(os.path.join(self.path_data,'model_save'))
-        #saver = tf.train.import_meta_graph(model_path+u'.meta')
-        saver = tf.train.Saver()
-        
-        with tf.Session() as sess:
-            #读取模型参数
-            saver.restore(sess, model_path)
-            #进行预测
-            feed_dict = self.get_feed_dict({self.x_ph:x}, predict=True)
-            result = sess.run(out,feed_dict=feed_dict)
-            if self.model_type=='bilstm_crf':
-                logits = np.array(result)
-                seq_lens = np.array(sess.run(self.seq_len,feed_dict=feed_dict))
-                transition_score_matrix = np.array(sess.run(self.transition_score_matrix))
-                label_list = []
-                for logit, seq_len in zip(logits, seq_lens):
-                    viterbi_seq, _ = nn_lib.viterbi_decode(logit[:seq_len], transition_score_matrix)
-                    label_list.append(viterbi_seq)
-                result = label_list
-            #打印变量
-            if False:
-                for var in tf.global_variables():
-                    print(var)
-                    var_value=sess.run(var)
-                    print(var_value)
-        return result
-    
-    '''========================================================================'''
     '''===============================model part==============================='''
     '''========================================================================'''
     #初始化模型参数
@@ -476,12 +479,12 @@ class neural_network(object):
             self.keep_prob = model_parameter.get('keep_prob',1.0)
             self.layer_num = 1
         elif self.model_type=='bilstm_crf':
-            self.word2vec = model_parameter.get('word2vec')
+            self.word_embd_pretrain = model_parameter.get('word_embd_pretrain')
             self.dim_lstm = model_parameter.get('dim_lstm',128)
             self.label_num = model_parameter.get('label_num',None)
             self.keep_prob = model_parameter.get('keep_prob',1.0)
             self.vocab_num = model_parameter.get('vocab_num',None)
-            self.w2v_dim = model_parameter.get('w2v_dim',None)
+            self.word_embd_dim = model_parameter.get('word_embd_dim',None)
             self.layer_num = 1
         elif self.model_type=='fm':
             #确定隐层向量维度
@@ -515,7 +518,8 @@ class neural_network(object):
             self.layer_output,self.seq_len,self.transition_score_matrix = \
                 nn_model.bilstm_crf(self.x_ph,self.keep_prob_ph,\
                                     self.dim_lstm,self.label_num,\
-                                    self.word2vec,self.vocab_num,self.w2v_dim)
+                                    self.word_embd_pretrain,self.vocab_num,\
+                                    self.word_embd_dim)
         elif self.model_type=='fm':
             self.x_ph = tf.placeholder('float32',[None,self.dim_x],name='x')
             self.y_ph = tf.placeholder('float32',[None,self.dim_y],name='y')

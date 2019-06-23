@@ -8,6 +8,7 @@ Created on Fri May  3 16:48:57 2019
 import tensorflow as tf
 import numpy as np
 import math
+import nn_lib
 
 #mlp模型
 def mlp(x,keep_prob,activation_fun,layer_num,dim):
@@ -45,14 +46,14 @@ def add_mlp_layer(layer_name,inputs,dim_in,dim_out,activation_fun=None,keep_prob
     return layer_output
 
 #带有embedding的RNN模型
-def rnn_nlp(x,keep_prob,word2vec,dim_lstm,dim_y):
+def rnn_nlp(x,keep_prob,word_embd_pretrain,dim_lstm,dim_y):
     with tf.variable_scope('rnn_nlp'):
         #layer[0] 输入数据，未embedding前
-        #x:[batch,time]
+        #x:[batch,step]
         layer_output = [x]
         #layer[1] 进行embedding
-        #embedding_w2v:[batch,time,embd]
-        embedding_w2v = tf.nn.embedding_lookup(word2vec, layer_output[0])
+        #embedding_w2v:[batch,step,embd]
+        embedding_w2v = tf.nn.embedding_lookup(word_embd_pretrain, layer_output[0])
         layer_output.append(embedding_w2v)
         #layer[2] 生成lstm实体，并进行dropout
         lstm_cell_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_lstm,state_is_tuple=True)
@@ -60,7 +61,7 @@ def rnn_nlp(x,keep_prob,word2vec,dim_lstm,dim_y):
         lstm_layer = tf.nn.dynamic_rnn(lstm_cell,layer_output[1],dtype=tf.float32)[0]
         layer_output.append(lstm_layer)
         #layer[3]
-        #transpose:[time,batch,embd]
+        #transpose:[step,batch,embd]
         transpose = tf.transpose(layer_output[2], [1, 0, 2])
         #transpose_gather:[batch,embd]提取lstm最后一个时刻的output数据
         transpose_gather = tf.gather(transpose, int(transpose.get_shape()[0].value)-1)
@@ -74,27 +75,27 @@ def rnn_nlp(x,keep_prob,word2vec,dim_lstm,dim_y):
     return layer_output
 
 #BiLSTM_CRF模型
-def bilstm_crf(x,keep_prob,dim_lstm,label_num,word2vec=None,vocab_num=None,w2v_dim=None):
+def bilstm_crf(x,keep_prob,dim_lstm,label_num,word_embd_pretrain=None,vocab_num=None,word_embd_dim=None):
     with tf.variable_scope('bilstm_layer'):
-        #layer[0] 输入数据，未embedding
-        #x:[batch,time]
+        #layer[0] 输入数据，已onehot，未embedding
+        #x:[batch,step]
         layer_output = [x]
         #batch_len = layer_output[0].get_shape()[0].value
-        time_len = layer_output[0].get_shape()[1].value
+        step_len = layer_output[0].get_shape()[1].value
         seq_len = tf.cast(tf.reduce_sum(tf.sign(layer_output[0]), axis=1),tf.int32)
         #layer[1] 进行embedding
-        #embedding_w2v:[batch,time,embd]
-        if isinstance(word2vec,np.ndarray):
-            word2vec_new = tf.get_variable(name='word2vec',trainable=True,\
-                                initializer=word2vec)
+        #embedding_w2v:[batch,step,embd]
+        if isinstance(word_embd_pretrain,np.ndarray):
+            word_embd = tf.get_variable(name='word_embd',trainable=True,\
+                                initializer=word_embd_pretrain)
         else:
-            #在word2vec==None时，需要根据词表大小vocab_num和词向量维度w2v_dim，建立嵌入词向量word2vec
-            word2vec_new = tf.get_variable(name='word2vec',trainable=True,\
-                                initializer=tf.random_uniform((vocab_num,w2v_dim),-1,1,dtype=tf.float32))
-        embedding_w2v = tf.nn.embedding_lookup(word2vec_new, layer_output[0])
+            #在word_embd_pretrain==None时，需要根据词表大小vocab_num和词向量维度word_embd_dim，建立嵌入词向量word2vec
+            word_embd = tf.get_variable(name='word_embd',trainable=True,\
+                                initializer=tf.random_uniform((vocab_num,word_embd_dim),-1,1,dtype=tf.float32))
+        embedding_w2v = tf.nn.embedding_lookup(word_embd, layer_output[0])
         layer_output.append(embedding_w2v)
         #layer[2] 生成lstm实体，并进行dropout
-        #lstm_layer:[batch,time,dim_lstm*2]
+        #lstm_layer:[batch,step,dim_lstm*2]
         lstm_cell_fw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_lstm,state_is_tuple=True)
         lstm_cell_bw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_lstm,state_is_tuple=True)
         lstm_cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell=lstm_cell_fw_raw, output_keep_prob=keep_prob)
@@ -110,7 +111,7 @@ def bilstm_crf(x,keep_prob,dim_lstm,label_num,word2vec=None,vocab_num=None,w2v_d
         bias = tf.get_variable(name='bias',trainable=True,\
                     initializer=tf.truncated_normal([label_num],stddev=0.1,dtype=tf.float32))
         fc_hidden = tf.matmul(fc_hidden_raw, weight) + bias
-        layer_output.append(tf.reshape(fc_hidden, [-1,time_len,label_num]))
+        layer_output.append(tf.reshape(fc_hidden, [-1,step_len,label_num]))
     with tf.variable_scope('crf_layer'):
         transition_score_matrix = tf.get_variable(name='transition_score_matrix',\
                                     trainable=True,shape=[label_num,label_num])
