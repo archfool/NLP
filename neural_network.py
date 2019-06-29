@@ -174,8 +174,7 @@ class neural_network(object):
                     self.step=self.step+1
                     batch_x = x[step*self.batch_size : (step+1)*self.batch_size]
                     batch_y = y[step*self.batch_size : (step+1)*self.batch_size]
-                    feed_dict = self.get_feed_dict({self.x_ph:batch_x,\
-                                                    self.y_ph:batch_y})
+                    feed_dict = self.get_feed_dict({self.x_ph:batch_x,self.y_ph:batch_y},predict=False)
                     _,loss_value,score_value = sess.run([optimize_step,loss,score],feed_dict=feed_dict)
 #                    self.tmp1a,self.tmp1b = sess.run([self.model_out,self.y_ph],feed_dict=feed_dict)
                     #每次迭代输出一次评估得分
@@ -499,6 +498,7 @@ class neural_network(object):
     
     #构建模型
     def creat_model(self):
+        self.predict_ph = tf.placeholder(tf.bool,None,name='train_or_predict')
         if self.model_type=='mlp':
             self.x_ph = tf.placeholder('float32',[None,self.dim_x],name='x')
             self.y_ph = tf.placeholder('float32',[None,self.dim_y],name='y')
@@ -537,8 +537,6 @@ class neural_network(object):
             weight3 = tf.Variable(tf.truncated_normal([1],stddev=1,dtype=tf.float32),name='weight')
             out = weight1*rsrp/((rssi-2.0*rsrp*band_width-weight2*4.0*rsrp*band_width*prb_num-nc_rsrp_sum)/band_width/12.0+weight3*nc_rsrp_if_sum)
             self.layer_output.append(out)
-        elif self.model_type=='Bi-LSTM':
-            pass
         else:
             print('model_type error!')
             return
@@ -550,8 +548,13 @@ class neural_network(object):
     '''===============================other part==============================='''
     '''========================================================================'''
     #获取session.run的feed参数
-    def get_feed_dict(self, feed_dict_init, predict=False):
+    def get_feed_dict(self, feed_dict_init, predict):
         feed_dict = feed_dict_init
+        #标记当前模型是用于训练还是预测
+        if predict==True:
+            feed_dict[self.predict_ph] = True
+        else:
+            feed_dict[self.predict_ph] = False            
         #根据模型是否有dropout层，以及模型用于预测还是训练，选择传入的keep_prob参数
         if self.model_type=='test':
             pass

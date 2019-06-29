@@ -8,7 +8,9 @@ Created on Fri May  3 16:48:57 2019
 import tensorflow as tf
 import numpy as np
 import math
+from tensorflow.python.layers.core import Dense
 import nn_lib
+
 
 #mlp模型
 def mlp(x,keep_prob,activation_fun,layer_num,dim):
@@ -75,33 +77,38 @@ def rnn_nlp(x,keep_prob,word_embd_pretrain,dim_lstm,dim_y):
     return layer_output
 
 #BiLSTM_CRF模型
-def bilstm_crf(x,keep_prob,dim_lstm,label_num,word_embd_pretrain=None,vocab_num=None,word_embd_dim=None):
+def bilstm_crf(x,keep_prob,dim_lstm,label_num,word_embd_pretrain=None,vocab_size=None,word_embd_dim=None):
     with tf.variable_scope('bilstm_layer'):
         #layer[0] 输入数据，已onehot，未embedding
-        #x:[batch,step]
+        #x:[batch_size,step_len]
         layer_output = [x]
         #batch_len = layer_output[0].get_shape()[0].value
         step_len = layer_output[0].get_shape()[1].value
         seq_len = tf.cast(tf.reduce_sum(tf.sign(layer_output[0]), axis=1),tf.int32)
         #layer[1] 进行embedding
-        #embedding_w2v:[batch,step,embd]
+        #word_embd:[batch_size,step_len,embd_dim]
         if isinstance(word_embd_pretrain,np.ndarray):
             word_embd = tf.get_variable(name='word_embd',trainable=True,\
                                 initializer=word_embd_pretrain)
+            vocab_size = word_embd.shape[0].value
+            word_embd_dim = word_embd.shape[1].value
         else:
-            #在word_embd_pretrain==None时，需要根据词表大小vocab_num和词向量维度word_embd_dim，建立嵌入词向量word2vec
+            #在word_embd_pretrain==None时，需要根据词表大小vocab_size和词向量维度word_embd_dim，建立嵌入词向量word2vec
             word_embd = tf.get_variable(name='word_embd',trainable=True,\
-                                initializer=tf.random_uniform((vocab_num,word_embd_dim),-1,1,dtype=tf.float32))
+                                initializer=tf.random_uniform((vocab_size,word_embd_dim),-1,1,dtype=tf.float32))
         embedding_w2v = tf.nn.embedding_lookup(word_embd, layer_output[0])
         layer_output.append(embedding_w2v)
-        #layer[2] 生成lstm实体，并进行dropout
-        #lstm_layer:[batch,step,dim_lstm*2]
+        #layer[2] 生成BiLSTM实体，并进行dropout
+        #lstm_layer:[batch_size,step_len,dim_lstm*2]
         lstm_cell_fw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_lstm,state_is_tuple=True)
         lstm_cell_bw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_lstm,state_is_tuple=True)
         lstm_cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell=lstm_cell_fw_raw, output_keep_prob=keep_prob)
         lstm_cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell=lstm_cell_bw_raw, output_keep_prob=keep_prob)
-        lstm_layer_raw = tf.nn.bidirectional_dynamic_rnn(lstm_cell_fw,lstm_cell_bw,\
-                            layer_output[1],sequence_length=seq_len,dtype=tf.float32)[0]
+        lstm_layer_raw,_ = tf.nn.bidirectional_dynamic_rnn(lstm_cell_fw,lstm_cell_bw,\
+                            layer_output[1],sequence_length=seq_len,dtype=tf.float32)
+#        print("\n",type(states),states.__len__(),"\n")
+#        print("\n",type(states[0]),states[0].__len__(),"\n")
+#        print("\n",type(states[0][0]),states[0][0].shape,states[0][1].shape,"\n")
         lstm_layer = tf.concat(lstm_layer_raw, axis=2)
         layer_output.append(lstm_layer)
         #layer[3] 全连接层
@@ -116,6 +123,107 @@ def bilstm_crf(x,keep_prob,dim_lstm,label_num,word_embd_pretrain=None,vocab_num=
         transition_score_matrix = tf.get_variable(name='transition_score_matrix',\
                                     trainable=True,shape=[label_num,label_num])
     return layer_output,seq_len,transition_score_matrix
+
+#seq2seq模型
+def seq2seq(x,y,keep_prob,predict,dim_lstm,\
+            encoder_word_embd_pretrain=None,encoder_vocab_size=None,word_embd_dim=None,\
+            decoder_word_embd_pretrain=None,decoder_vocab_size=None):
+    with tf.variable_scope('seq2seq'):
+        """定义解码器的word_embedding"""
+        #word_embd:[batch_size,step_len,embd_dim]
+        if isinstance(encoder_word_embd_pretrain,np.ndarray):
+            encoder_word_embd = tf.get_variable(name='encoder_word_embd',trainable=True,\
+                                initializer=encoder_word_embd_pretrain)
+            encoder_vocab_size = encoder_word_embd.shape[0].value
+            word_embd_dim = encoder_word_embd.shape[1].value
+        else:
+            #在word_embd_pretrain==None时，需要根据词表大小vocab_size和词向量维度word_embd_dim，建立嵌入词向量word2vec
+            encoder_word_embd = tf.get_variable(name='encoder_word_embd',trainable=True,\
+                                initializer=tf.random_uniform((encoder_vocab_size,word_embd_dim),-1,1,dtype=tf.float32))
+        #定义解码器的word_embedding
+        #word_embd:[batch_size,step_len,embd_dim]
+        if isinstance(decoder_word_embd_pretrain,np.ndarray):
+            decoder_word_embd = tf.get_variable(name='decoder_word_embd',trainable=True,\
+                                initializer=decoder_word_embd_pretrain)
+        else:
+            #在word_embd_pretrain==None时，需要根据词表大小vocab_size和词向量维度word_embd_dim，建立嵌入词向量word2vec
+            decoder_word_embd = tf.get_variable(name='decoder_word_embd',trainable=True,\
+                                initializer=tf.random_uniform((decoder_vocab_size,word_embd_dim),-1,1,dtype=tf.float32))
+        """layer[0] 输入数据，已onehot，未embedding"""
+        #x:[batch_size,step_len]
+        #TODO: layer_output = [tf.convert_to_tensor(x)]
+        layer_output = [x]
+        batch_size = layer_output[0].get_shape()[0].value
+        encoder_step_len = layer_output[0].get_shape()[1].value
+        encoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(layer_output[0]), axis=1),tf.int32)
+        """layer[1] 对输入数据进行embedding"""
+        encoder_embedding_w2v = tf.nn.embedding_lookup(encoder_word_embd, layer_output[0])
+        layer_output.append(encoder_embedding_w2v)
+        """layer[2] encoder：生成BiLSTM实体，并进行dropout"""
+        #lstm_layer:[batch_size,step_len,dim_lstm*2]
+        lstm_cell_fw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_lstm,state_is_tuple=True)
+        lstm_cell_bw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_lstm,state_is_tuple=True)
+        lstm_cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell=lstm_cell_fw_raw, output_keep_prob=keep_prob)
+        lstm_cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell=lstm_cell_bw_raw, output_keep_prob=keep_prob)
+        encoder_output_raw,_ = tf.nn.bidirectional_dynamic_rnn(lstm_cell_fw,lstm_cell_bw,\
+                                    layer_output[1],sequence_length=encoder_seq_len,dtype=tf.float32)
+        encoder_outputs = tf.concat(encoder_output_raw, axis=2)
+        layer_output.append(encoder_outputs)
+        """layer[3]"""
+        #注意力机制
+        attention_mechanism = nn_lib.LuongAttention(
+                                num_units=dim_lstm*2, 
+                                memory=layer_output[2], 
+                                memory_sequence_length=encoder_seq_len)
+        #定义decoder结构
+        decoder_cell_raw = tf.nn.rnn_cell.BasicLSTMCell(dim_lstm)
+        decoder_cell = nn_lib.AttentionWrapper(
+                            cell=decoder_cell_raw, 
+                            attention_mechanism=attention_mechanism, 
+                            attention_layer_size=dim_lstm*2)
+        #helper和decoder实体
+        decoder_initial_state = decoder_cell.zero_state(batch_size,dtype=tf.float32)
+        projection_layer = Dense(decoder_vocab_size, use_bias=False)
+        if True==predict:
+            #在词表中，<UNK>为0，<SOS>为1，<EOS>为2
+            helper = nn_lib.GreedyEmbeddingHelper(decoder_word_embd,\
+                                                  tf.fill([batch_size],1),\
+                                                  2)
+        elif False==predict:
+#            decoder_step_len = y.get_shape()[1].value
+            decoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(y), axis=1),tf.int32)
+            decoder_embedding_w2v = tf.nn.embedding_lookup(decoder_word_embd, y)
+            helper = nn_lib.CopyNetTrainingHelper(inputs=decoder_embedding_w2v,\
+                                                  encoder_inputs_ids=x,\
+                                                  sequence_length=decoder_seq_len)
+        else:
+            print("value of predict is error!!!")
+        #
+        if True==predict:        
+            decoder = nn_lib.BasicDecoder(cell=decoder_cell,\
+                                          helper=helper,\
+                                          initial_state=decoder_initial_state,
+                                          output_layer=projection_layer)
+            maximum_iterations = tf.round(encoder_step_len * 2)
+            decoder_outputs,_,_ = nn_lib.dynamic_decode(decoder,
+                                    maximum_iterations=maximum_iterations)
+            translations = decoder_outputs.sample_id
+        elif False==predict:
+            config={'encoder_max_seq_len':encoder_step_len,
+                    'vocab_size':encoder_vocab_size}
+            decoder = nn_lib.CopyNetDecoder(config=config,
+                                            cell=decoder_cell,
+                                            helper=helper,
+                                            initial_state=decoder_initial_state,
+                                            encoder_outputs=encoder_outputs,
+                                            output_layer=projection_layer)
+            decoder_outputs,_,_ = nn_lib.dynamic_decode(decoder)
+            logits = decoder_outputs.rnn_output
+        else:
+            print("value of predict is error!!!")
+        
+        
+        nn_lib.CopyNetDecoder
 
 #FM模型
 def fm(x,dim_x,dim_y,dim_lv):
