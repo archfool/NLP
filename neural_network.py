@@ -215,7 +215,7 @@ class neural_network(object):
         tf.reset_default_graph()
         
         #构建模型
-        out = self.creat_model()
+        model_out = self.creat_model()
         print('\n=================\n')
         #初始化模型存取器
         model_path = tf.train.latest_checkpoint(self.path_data+r'model_save\\')
@@ -229,7 +229,7 @@ class neural_network(object):
             saver.restore(sess, model_path)
             #进行预测
             feed_dict = self.get_feed_dict({self.x_ph:x}, predict=True)
-            result = sess.run(out,feed_dict=feed_dict)
+            result = sess.run(model_out,feed_dict=feed_dict)
             if self.model_type=='bilstm_crf':
                 logits = np.array(result)
                 seq_lens = np.array(sess.run(self.seq_len,feed_dict=feed_dict))

@@ -7,12 +7,16 @@ Created on Mon Mar 11 08:53:30 2019
 
 import jieba
 import jieba.posseg as psg
+import sys
+import pickle
+import os
+import random
 
 
 #加载停用词表
 def get_stopwords(path_data=None):
     if path_data==None:
-        stopword_path = path_nlp+r'stopword_hgd.txt'
+        stopword_path = r'.\\data\\stopword.txt'
     else:
         stopword_path = path_data
     stopwords = [word.replace('\n', '') for word in open(stopword_path,encoding='utf-8').readlines()]
@@ -27,4 +31,109 @@ def str_segment(sentence, pos=False):
         # 进行词性标注的分词方法
         seg_list = psg.lcut(sentence)
     return seg_list
+
+#建立带有词频的词表
+def word2id_build(data, word2id_saved_path, vocabulary_size=None, language='chs', retain_eng=True, retain_digit=True):
+    # data = read_corpus(corpus_path)
+    #若词表数量参数为空，则根据语言类型，配置缺省值
+    if None==vocabulary_size:
+        if 'chs'==language:
+            vocabulary_size = 4000
+        elif 'eng'==language:
+            vocabulary_size = 8000
+    #简历word2id字典变量
+    word_num = sum([len(sent) for sent in data])
+    word2id = {}
+    word2id['<PAD>'] = [0, word_num];
+    word2id['<UNK>'] = [1, word_num];
+    word2id['<SOS>'] = [2, word_num];
+    word2id['<EOS>'] = [3, word_num];
+    word2id_constant_len = len(word2id)
+    # for sent_, label_ in data:
+    for sentence in data:
+        for word in sentence:
+            #替换特定领域的词汇为类型名
+            if (False == retain_digit) and word.isdigit():
+                word = '<NUM>'
+            elif (False==retain_eng) and (('\u0041' <= word <='\u005a') or ('\u0061' <= word <='\u007a')):
+                word = '<ENG>'
+            #生成字典
+            if word not in word2id:
+                word2id[word] = [len(word2id)+1, 1]
+            else:
+                word2id[word][1] += 1
+    #根据词表大小，筛选出高频词
+    word2id_list = sorted(word2id.items(), key=lambda word2id: word2id[1][1], reverse=True)[:vocabulary_size]
+    # 对词表进行重新编号
+    for idx in range(word2id_constant_len):
+        word2id_list[idx] = (word2id_list[idx][0], word2id_list[idx][1][0])
+    idx_num = word2id_constant_len
+    for idx_num in range(word2id_constant_len, len(word2id_list)):
+        word2id_list[idx_num] = (word2id_list[idx_num][0], idx_num)
+    #将词表由列表格式转换为字典格式
+    word2id = dict(word2id_list)
+    #按词频绝对值确定词表，已弃用
+    # low_freq_words = []
+    # for word, [word_id, word_freq] in word2id.items():
+    #     if word_freq < min_count and word != '<NUM>' and word != '<ENG>':
+    #         low_freq_words.append(word)
+    # for word in low_freq_words:
+    #     del word2id[word]
+    with open(word2id_saved_path, 'wb') as file:
+        pickle.dump(word2id, file)
+    return word2id,len(word2id)
+
+#读取编码词典
+def read_word2id_dict(path):
+    with open(path, 'rb') as f:
+        word2id = pickle.load(f)
+    vocab_size = len(word2id)
+    return word2id,vocab_size
+
+#将句子转化为ID序列
+def sentence2id(sent, word2id_vocab, retain_eng=True, retain_digit=True):
+    sent = list(sent)
+    sentence_id = []
+    for word in sent:
+        if (False == retain_digit) and word.isdigit():
+            word = '<NUM>'
+        elif (False == retain_eng) and (('\u0041' <= word <= '\u005a') or ('\u0061' <= word <= '\u007a')):
+            word = '<ENG>'
+        if word not in word2id_vocab:
+            word = '<UNK>'
+        sentence_id.append(word2id_vocab[word])
+    return sentence_id
+
+#将句子序列补0至固定长度
+def pad_sequences(sequences, max_seq_len, pad_mark=0):
+    #sequences = [seq_1,seq_2,...,seq_n]
+    #seq = [word_1,word_2,...,word_m]
+    #max_len = max(map(lambda x : len(x), sequences))
+    max_len = max_seq_len
+    seq_list, seq_len_list = [], []
+    for seq in sequences:
+        seq = list(seq)
+        seq_ = seq[:max_len] + [pad_mark] * max(max_len - len(seq), 0)
+        seq_list.append(seq_)
+        seq_len_list.append(min(len(seq), max_len))
+    return seq_list, seq_len_list
+
+
+if __name__=='__main__':
+    pass
+    # data = []
+    # with open(r'..\\data\\ner\\train_data', encoding='utf-8') as f:
+    #     lines = f.readlines()
+    # sent_, label_ = [], []
+    # for line in lines:
+    #     if line != '\n':
+    #         [char, label] = line.strip().split()
+    #         sent_.append(char)
+    #         label_.append(label)
+    #     else:
+    #         # data.append((sent_, label_))
+    #         data.append(sent_)
+    #         sent_, label_ = [], []
+    # word2id,vocab_size = word2id_build(data, r'..\\data\\ner\\word2id.pkl',retain_eng=False,retain_digit=False)
+    # print(vocab_size)
 

@@ -189,17 +189,6 @@ def seq2seq(x,y,keep_prob,predict,dim_lstm,\
             helper = nn_lib.GreedyEmbeddingHelper(decoder_word_embd,\
                                                   tf.fill([batch_size],1),\
                                                   2)
-        elif False==predict:
-#            decoder_step_len = y.get_shape()[1].value
-            decoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(y), axis=1),tf.int32)
-            decoder_embedding_w2v = tf.nn.embedding_lookup(decoder_word_embd, y)
-            helper = nn_lib.CopyNetTrainingHelper(inputs=decoder_embedding_w2v,\
-                                                  encoder_inputs_ids=x,\
-                                                  sequence_length=decoder_seq_len)
-        else:
-            print("value of predict is error!!!")
-        #
-        if True==predict:        
             decoder = nn_lib.BasicDecoder(cell=decoder_cell,\
                                           helper=helper,\
                                           initial_state=decoder_initial_state,
@@ -209,6 +198,12 @@ def seq2seq(x,y,keep_prob,predict,dim_lstm,\
                                     maximum_iterations=maximum_iterations)
             translations = decoder_outputs.sample_id
         elif False==predict:
+#            decoder_step_len = y.get_shape()[1].value
+            decoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(y), axis=1),tf.int32)
+            decoder_embedding_w2v = tf.nn.embedding_lookup(decoder_word_embd, y)
+            helper = nn_lib.CopyNetTrainingHelper(inputs=decoder_embedding_w2v,\
+                                                  encoder_inputs_ids=x,\
+                                                  sequence_length=decoder_seq_len)
             config={'encoder_max_seq_len':encoder_step_len,
                     'vocab_size':encoder_vocab_size}
             decoder = nn_lib.CopyNetDecoder(config=config,
