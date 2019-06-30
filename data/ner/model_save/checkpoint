@@ -1,8 +1,0 @@
-model_checkpoint_path: "E:\\\\MachineLearning\\\\data\\\\nlp\\\\ner\\\\model_save\\mnist.ckpt-650"
-all_model_checkpoint_paths: "E:\\\\MachineLearning\\\\data\\\\nlp\\\\ner\\\\model_save\\mnist.ckpt-100"
-all_model_checkpoint_paths: "E:\\\\MachineLearning\\\\data\\\\nlp\\\\ner\\\\model_save\\mnist.ckpt-200"
-all_model_checkpoint_paths: "E:\\\\MachineLearning\\\\data\\\\nlp\\\\ner\\\\model_save\\mnist.ckpt-300"
-all_model_checkpoint_paths: "E:\\\\MachineLearning\\\\data\\\\nlp\\\\ner\\\\model_save\\mnist.ckpt-400"
-all_model_checkpoint_paths: "E:\\\\MachineLearning\\\\data\\\\nlp\\\\ner\\\\model_save\\mnist.ckpt-500"
-all_model_checkpoint_paths: "E:\\\\MachineLearning\\\\data\\\\nlp\\\\ner\\\\model_save\\mnist.ckpt-600"
-all_model_checkpoint_paths: "E:\\\\MachineLearning\\\\data\\\\nlp\\\\ner\\\\model_save\\mnist.ckpt-650"
