@@ -33,24 +33,18 @@ def str_segment(sentence, pos=False):
     return seg_list
 
 #建立带有词频的词表
-def word2id_build(data, word2id_saved_path, vocabulary_size=None, language='chs', retain_eng=True, retain_digit=True):
+def build_word2id_vocab(data, vocab_saved_path, vocab_size=None, language='chs', retain_eng=True, retain_digit=True):
     # data = read_corpus(corpus_path)
     #若词表数量参数为空，则根据语言类型，配置缺省值
-    if None==vocabulary_size:
+    if None==vocab_size:
         if 'chs'==language:
-            vocabulary_size = 4000
+            vocab_size = 4000
         elif 'eng'==language:
-            vocabulary_size = 8000
+            vocab_size = 8000
     #简历word2id字典变量
-    word_num = sum([len(sent) for sent in data])
     word2id = {}
-    word2id['<PAD>'] = [0, word_num];
-    word2id['<UNK>'] = [1, word_num];
-    word2id['<SOS>'] = [2, word_num];
-    word2id['<EOS>'] = [3, word_num];
-    word2id_constant_len = len(word2id)
-    # for sent_, label_ in data:
     for sentence in data:
+        sentence = list(sentence)
         for word in sentence:
             #替换特定领域的词汇为类型名
             if (False == retain_digit) and word.isdigit():
@@ -59,27 +53,16 @@ def word2id_build(data, word2id_saved_path, vocabulary_size=None, language='chs'
                 word = '<ENG>'
             #生成字典
             if word not in word2id:
-                word2id[word] = [len(word2id)+1, 1]
+                word2id[word] = 1
             else:
-                word2id[word][1] += 1
+                word2id[word] += 1
     #根据词表大小，筛选出高频词
-    word2id_list = sorted(word2id.items(), key=lambda word2id: word2id[1][1], reverse=True)[:vocabulary_size]
-    # 对词表进行重新编号
-    for idx in range(word2id_constant_len):
-        word2id_list[idx] = (word2id_list[idx][0], word2id_list[idx][1][0])
-    idx_num = word2id_constant_len
-    for idx_num in range(word2id_constant_len, len(word2id_list)):
-        word2id_list[idx_num] = (word2id_list[idx_num][0], idx_num)
+    word2id_list = sorted(word2id.items(), key=lambda word2id: word2id[1], reverse=True)[:vocab_size]
+    #加上保留符号
+    word2id_list = ['<PAD>','<SOS>','<EOS>','<UNK>']+[word for word,word_freq in word2id_list]
     #将词表由列表格式转换为字典格式
-    word2id = dict(word2id_list)
-    #按词频绝对值确定词表，已弃用
-    # low_freq_words = []
-    # for word, [word_id, word_freq] in word2id.items():
-    #     if word_freq < min_count and word != '<NUM>' and word != '<ENG>':
-    #         low_freq_words.append(word)
-    # for word in low_freq_words:
-    #     del word2id[word]
-    with open(word2id_saved_path, 'wb') as file:
+    word2id = {word:id for word,id in zip(word2id_list, range(len(word2id_list)))}
+    with open(vocab_saved_path, 'wb') as file:
         pickle.dump(word2id, file)
     return word2id,len(word2id)
 
@@ -120,20 +103,19 @@ def pad_sequences(sequences, max_seq_len, pad_mark=0):
 
 
 if __name__=='__main__':
-    pass
-    # data = []
-    # with open(r'..\\data\\ner\\train_data', encoding='utf-8') as f:
-    #     lines = f.readlines()
-    # sent_, label_ = [], []
-    # for line in lines:
-    #     if line != '\n':
-    #         [char, label] = line.strip().split()
-    #         sent_.append(char)
-    #         label_.append(label)
-    #     else:
-    #         # data.append((sent_, label_))
-    #         data.append(sent_)
-    #         sent_, label_ = [], []
-    # word2id,vocab_size = word2id_build(data, r'..\\data\\ner\\word2id.pkl',retain_eng=False,retain_digit=False)
-    # print(vocab_size)
+    data = []
+    with open(r'..\\data\\ner\\train_data', encoding='utf-8') as f:
+        lines = f.readlines()
+    sent_, label_ = [], []
+    for line in lines:
+        if line != '\n':
+            [char, label] = line.strip().split()
+            sent_.append(char)
+            label_.append(label)
+        else:
+            # data.append((sent_, label_))
+            data.append(sent_)
+            sent_, label_ = [], []
+    word2id,vocab_size = build_word2id_vocab(data, r'..\\data\\ner\\word2id.pkl',retain_eng=False,retain_digit=False)
+    print(vocab_size)
 

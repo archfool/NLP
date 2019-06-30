@@ -22,34 +22,34 @@ import nn_lib
 
 path_nlp = r'.\\data\\'
 path_ner = path_nlp+r'ner\\'
-dim_lstm = 128
+word_embd_dim = 300
+dim_lstm = 300
 learning_rate = 0.001
 batch_size = 1024
 
-# ##NER labels, BIO
-# label2id = {"O": 0,
-#              "B-PER": 1, "I-PER": 2,
-#              "B-LOC": 3, "I-LOC": 4,
-#              "B-ORG": 5, "I-ORG": 6
-#              }
-# id2label = {id:label for label,id in label2id.items()}
+##NER labels, BIO
+label2id = {"O": 0,
+             "B-PER": 1, "I-PER": 2,
+             "B-LOC": 3, "I-LOC": 4,
+             "B-ORG": 5, "I-ORG": 6
+             }
+id2label = {id:label for label,id in label2id.items()}
 
-# #读取字ID字典
-# def read_word2id_dict(path):
-#     with open(path, 'rb') as f:
-#         word2id = pickle.load(f)
-#     return word2id
-
-# #随机初始化词向量矩阵
-# def random_w2v_embedding(word2id, embedding_dim):
-#     """
-#     :param word2id:
-#     :param embedding_dim:
-#     :return:
-#     """
-#     embedding_mat = np.random.uniform(-0.25, 0.25, (len(word2id), embedding_dim))
-#     embedding_mat = np.float32(embedding_mat)
-#     return embedding_mat
+#读取用于训练的语料库
+def read_ner_corpus(corpus_path):
+    data = []
+    with open(corpus_path, encoding='utf-8') as f:
+        lines = f.readlines()
+    sent_, label_ = [], []
+    for line in lines:
+        if line != '\n':
+            [char, label] = line.strip().split()
+            sent_.append(char)
+            label_.append(label)
+        else:
+            data.append((sent_, label_))
+            sent_, label_ = [], []
+    return data
 
 #预处理数据
 def train_data_process(data,word2id,label2id):
@@ -127,16 +127,15 @@ def train_data_process(data,word2id,label2id):
 if __name__=='__main__':
     if True:
         data = nn_lib.read_ner_corpus(path_ner+r'train_data')
-        a = [sent for sent, label in data]
-        word2id, vocab_size = nn_lib.word2id_build([sent for sent,label in data],
-                                                   path_ner+r'word2id.pkl',
-                                                   retain_eng=False,
-                                                   retain_digit=False)
+        data_ = [sent for sent, label in data]
+        word2id, vocab_size = nn_lib.build_word2id_vocab(data_,
+                                                         path_ner+r'word2id.pkl',
+                                                         retain_eng=False,
+                                                         retain_digit=False)
         print(vocab_size)
     if not 'x' in locals():
         word2id,vocab_size = nn_lib.read_word2id_dict(path_ner+r'word2id.pkl')
-        label2id = nn_lib.label2id
-        data = nn_lib.read_ner_corpus(path_ner + r'train_data')
+        data = read_ner_corpus(path_ner + r'train_data')
         x,y,max_seq_len = train_data_process(data,word2id,label2id)
     random_seed = int(time.time())
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.05, random_state=random_seed)
@@ -144,13 +143,14 @@ if __name__=='__main__':
                            model_type='bilstm_crf',loss_fun_type='bilstm_crf',\
                            eval_score_type='bilstm_crf_loss',optimizer_type='Adam',\
                            model_parameter={'word_embd_pretrain':None,\
-                                            'keep_prob':0.95,\
+                                            'keep_prob':0.8,\
                                             'vocab_num':vocab_size,\
-                                            'word_embd_dim':100,\
+                                            'word_embd_dim':word_embd_dim,\
                                             'label_num':len(label2id),\
                                             'dim_lstm':dim_lstm},\
                            hyper_parameter={'learning_rate':learning_rate,\
                                             'batch_size':batch_size,\
+                                            'model_save_epoch':50,\
                                             'early_stop_rounds':150},\
                            path_data=path_ner)
     #训练
