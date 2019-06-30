@@ -2,7 +2,7 @@
 """
 Created on Sun Jun 16 20:31:32 2019
 
-@author: Administrator
+@author: ruan
 """
 import codecs
 import collections
@@ -45,6 +45,7 @@ def write_file(file_path,data):
             f.write(sentence)
     return
 
+def to_delete():
 #根据语料库建立词表
 # def built_vocab(path_corpus, path_vocab, vocab_size):
 #     #读取语料库单词
@@ -87,6 +88,7 @@ def write_file(file_path,data):
 #     fin.close()
 #     fout.close()
 #     return
+    pass
 
 #数据预处理
 def preprocess_data(path_corpus, path_vocab, vocab_size, path_train_raw, path_train_done):
@@ -101,18 +103,14 @@ def preprocess_data(path_corpus, path_vocab, vocab_size, path_train_raw, path_tr
     write_file(path_train_done, data_)
     return data,data_
 
-    # word_zh = built_vocab(path_corpus_zh, path_vocab_zh, vocab_size_zh)
-    # word_en = built_vocab(path_corpus_en, path_vocab_en, vocab_size_en)
-    # corpus_onehot(path_vocab_zh, path_train_raw_zh, path_train_done_zh)
-    # corpus_onehot(path_vocab_en, path_train_raw_en, path_train_done_en)
-    # return word_zh,word_en
-
 if __name__ == "__main__":
-    if True:
+    if False:
         preprocess_data(path_corpus_zh, path_vocab_zh, vocab_size_zh, path_train_raw_zh, path_train_done_zh)
         preprocess_data(path_corpus_en, path_vocab_en, vocab_size_en, path_train_raw_en, path_train_done_en)
-    if False:
-        word_zh,word_en = data_pre_process()
+    if True:
+        data_zh = read_file(path_train_done_zh)
+        data_en = read_file(path_train_done_en)
+
 
 
 

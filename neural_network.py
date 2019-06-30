@@ -479,7 +479,7 @@ class neural_network(object):
             self.layer_num = 1
         elif self.model_type=='bilstm_crf':
             self.word_embd_pretrain = model_parameter.get('word_embd_pretrain')
-            self.dim_lstm = model_parameter.get('dim_lstm',128)
+            self.dim_lstm = model_parameter.get('dim_lstm',200)
             self.label_num = model_parameter.get('label_num',None)
             self.keep_prob = model_parameter.get('keep_prob',1.0)
             self.vocab_num = model_parameter.get('vocab_num',None)
