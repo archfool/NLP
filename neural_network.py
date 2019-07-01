@@ -186,7 +186,7 @@ class neural_network(object):
                         break
                     #周期性存储模型参数，并进行验证集验证
                     if self.step%self.model_save_epoch==0:
-                        saver.save(sess,self.path_data+'model_save\\mnist.ckpt',global_step=self.step)
+                        saver.save(sess,self.path_data+u'model_save\\mnist.ckpt',global_step=self.step)
                         gc.collect()
                     if (built_in_test==True and self.step%self.built_in_test_epoch==0):
                         built_in_test_score = sess.run(built_in_test_cal,feed_dict=feed_dict_test)
@@ -199,7 +199,7 @@ class neural_network(object):
                 if self.early_stop_flag or self.built_in_test_stop_flag:
                     print('good model!')
                     break
-            saver.save(sess,self.path_data+'model_save\\mnist.ckpt',global_step=self.step)
+            saver.save(sess,self.path_data+u'model_save\\mnist.ckpt',global_step=self.step)
             print('Train model end!')
         return
     
@@ -216,10 +216,8 @@ class neural_network(object):
         
         #构建模型
         model_out = self.creat_model()
-        print('\n=================\n')
         #初始化模型存取器
-        model_path = tf.train.latest_checkpoint(self.path_data+r'model_save\\')
-        print('\n=================\n')
+        model_path = tf.train.latest_checkpoint(self.path_data+u'model_save\\')
 #        model_path = tf.train.latest_checkpoint(os.path.join(self.path_data,'model_save'))
         #saver = tf.train.import_meta_graph(model_path+u'.meta')
         saver = tf.train.Saver()

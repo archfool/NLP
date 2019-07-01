@@ -20,8 +20,9 @@ from sklearn.model_selection import train_test_split
 from neural_network import neural_network
 import nn_lib
 
-path_nlp = r'.\\data\\'
-path_ner = path_nlp+r'ner\\'
+
+path_nlp = u'.\\data\\'
+path_ner = path_nlp+u'ner\\'
 word_embd_dim = 300
 dim_lstm = 300
 learning_rate = 0.001
@@ -65,68 +66,50 @@ def train_data_process(data,word2id,label2id):
     labels = nn_lib.pad_sequences(labels,max_seq_len)[0]
     return seqs,labels,max_seq_len
 
-# #读取用于训练的语料库
-# def read_ner_corpus(corpus_path):
-#     data = []
-#     with open(corpus_path, encoding='utf-8') as f:
-#         lines = f.readlines()
-#     sent_, label_ = [], []
-#     for line in lines:
-#         if line != '\n':
-#             [char, label] = line.strip().split()
-#             sent_.append(char)
-#             label_.append(label)
-#         else:
-#             data.append((sent_, label_))
-#             sent_, label_ = [], []
-#     return data
-
-
-
-# #命名实体识别预测
-# def ner_predict(model, x, word2id, label2id, max_len=None, do_word2id=True):
-#     #反映射
-#     id2word = {id:word for word,id in word2id.items()}
-#     id2label = {id:label for label,id in label2id.items()}
-#     #获取最大seq长度
-#     if max_len==None:
-#         max_len = max(map(lambda seq : len(seq), x))
-#     #规整输入文本
-#     if do_word2id==True:
-#         seqs = []
-#         word_list = []
-#         for seq in x:
-#             seq = list(seq)
-#             word_list.append(seq)
-#             seq = sentence2id(seq, word2id)
-#             seqs.append(seq)
-#         seqs = pad_sequences(seqs,max_len)[0]
-#     else:
-#         seqs = x
-#         word_list = []
-#         for row in x:
-#             word_list.append(series(row).map(id2word).tolist())
-#     #预测标签
-#     label_id_list = model.predict(seqs)
-#     label_list = []
-#     for row in label_id_list:
-#         label_list.append(series(row).map(id2label).tolist())
-#     #文本-标签
-#     word_label_list = []
-#     for words,labels in zip(word_list,label_list):
-#         word_label = []
-#         for word,label in zip(words,labels):
-#             if label==label:
-#                 word_label.append((word,label))
-#             else:
-#                 break
-#         word_label_list.append(word_label)
-#     return word_label_list
+#命名实体识别预测
+def ner_predict(model, x, word2id, label2id, max_len=None, do_word2id=True):
+    #反映射
+    id2word = {id:word for word,id in word2id.items()}
+    id2label = {id:label for label,id in label2id.items()}
+    #获取最大seq长度
+    if max_len==None:
+        max_len = max(map(lambda seq : len(seq), x))
+    #规整输入文本
+    if do_word2id==True:
+        seqs = []
+        word_list = []
+        for seq in x:
+            seq = list(seq)
+            word_list.append(seq)
+            seq = nn_lib.sentence2id(seq, word2id)
+            seqs.append(seq)
+        seqs = nn_lib.pad_sequences(seqs,max_len)[0]
+    else:
+        seqs = x
+        word_list = []
+        for row in x:
+            word_list.append(series(row).map(id2word).tolist())
+    #预测标签
+    label_id_list = model.predict(seqs)
+    label_list = []
+    for row in label_id_list:
+        label_list.append(series(row).map(id2label).tolist())
+    #文本-标签
+    word_label_list = []
+    for words,labels in zip(word_list,label_list):
+        word_label = []
+        for word,label in zip(words,labels):
+            if label==label:
+                word_label.append((word,label))
+            else:
+                break
+        word_label_list.append(word_label)
+    return word_label_list
 
 
 if __name__=='__main__':
-    if True:
-        data = nn_lib.read_ner_corpus(path_ner+r'train_data')
+    if False:
+        data = read_ner_corpus(path_ner+r'train_data')
         data_ = [sent for sent, label in data]
         word2id, vocab_size = nn_lib.build_word2id_vocab(data_,
                                                          path_ner+r'word2id.pkl',
@@ -150,14 +133,14 @@ if __name__=='__main__':
                                             'dim_lstm':dim_lstm},\
                            hyper_parameter={'learning_rate':learning_rate,\
                                             'batch_size':batch_size,\
-                                            'model_save_epoch':50,\
+                                            'model_save_epoch':1,\
                                             'early_stop_rounds':150},\
                            path_data=path_ner)
     #训练
-    if True:
+    if False:
         model.train(transfer_learning=False,built_in_test=True,x_test=x_test,y_test=y_test)
     #预测
-    if False:
+    if True:
         #模式一（常用）
         x_tmp = ['五一广场','毛泽东雕像','万科小区','福州市一建宿舍','新华书店','福建新华发行集团',\
              '火巷里','工商银行宿舍阳光假日公寓','福建省二轻宿舍','新侨联广场',\
@@ -165,7 +148,7 @@ if __name__=='__main__':
              '福宏小区','水涧新村','省工商银行宿舍']
         word_label_list_1 = ner_predict(model,x_tmp,word2id,label2id,max_len=None,do_word2id=True)
         #模式二（不常用）
-        #word_label_list_2 = ner_predict(model,x_test,word2id,label2id,max_len=max_seq_len,do_word2id=False)
+        word_label_list_2 = ner_predict(model,x_test,word2id,label2id,max_len=max_seq_len,do_word2id=False)
     #导出模型参数
     if False:
         model.params_output()
