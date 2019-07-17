@@ -6,7 +6,8 @@ Created on Sat May  4 16:01:22 2019
 """
 
 import numpy as np
-from pandas import DataFrame as dataframe,Series as series
+from pandas import DataFrame as dataframe
+from pandas import Series as series
 import os
 import time
 import jieba
@@ -17,7 +18,7 @@ import tensorflow as tf
 import logging
 logging.basicConfig(level=logging.WARNING,format="[%(asctime)s] %(message)s",datefmt="%Y-%m-%d %H:%M:%S",)
 from sklearn.model_selection import train_test_split
-from neural_network import neural_network
+from neural_network import NeuralNetwork
 import nn_lib
 
 
@@ -122,7 +123,7 @@ if __name__=='__main__':
         x,y,max_seq_len = train_data_process(data,word2id,label2id)
     random_seed = int(time.time())
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.05, random_state=random_seed)
-    model = neural_network(x_train,y_train,task_type='classification',\
+    model = NeuralNetwork(x_train,y_train,task_type='classification',\
                            model_type='bilstm_crf',loss_fun_type='bilstm_crf',\
                            eval_score_type='bilstm_crf_loss',optimizer_type='Adam',\
                            model_parameter={'word_embd_pretrain':None,\
@@ -133,11 +134,11 @@ if __name__=='__main__':
                                             'dim_lstm':dim_lstm},\
                            hyper_parameter={'learning_rate':learning_rate,\
                                             'batch_size':batch_size,\
-                                            'model_save_epoch':1,\
+                                            'model_save_rounds':50,\
                                             'early_stop_rounds':150},\
                            path_data=path_ner)
     #训练
-    if False:
+    if True:
         model.train(transfer_learning=False,built_in_test=True,x_test=x_test,y_test=y_test)
     #预测
     if True:

@@ -4,13 +4,24 @@ Created on Sun Jun 16 20:31:32 2019
 
 @author: ruan
 """
+
 import codecs
 import collections
 from operator import itemgetter
+import numpy as np
+from pandas import DataFrame as dataframe
+from pandas import Series as series
+import os
+import time
+import tensorflow as tf
+import logging
+logging.basicConfig(level=logging.WARNING,format="[%(asctime)s] %(message)s",datefmt="%Y-%m-%d %H:%M:%S",)
+from sklearn.model_selection import train_test_split
+from neural_network import NeuralNetwork
 import nn_lib
 
-path_nlp = r'.\\data\\'
-path_seq2seq = path_nlp+r'seq2seq\\'
+path_data = u'.\\data\\'
+path_seq2seq = path_data+u'seq2seq\\'
 #中文词库相关参数
 vocab_size_zh = 4000
 path_corpus_zh = path_seq2seq+'train.txt.zh'
@@ -24,10 +35,11 @@ path_vocab_en = path_seq2seq+'en_vocab.pkl'
 path_train_raw_en =  path_corpus_en
 path_train_done_en =  path_seq2seq+'train.en'
 #超参数
-word_embd_dim = 300
-dim_lstm = 300
+word_embd_dim = 50
+dim_lstm = 50
 learning_rate = 0.001
 batch_size = 1024
+
 
 #读取样本数据
 def read_file(file_path):
@@ -44,6 +56,7 @@ def write_file(file_path,data):
         for sentence in data:
             f.write(sentence)
     return
+
 
 def to_delete():
 #根据语料库建立词表
@@ -91,25 +104,51 @@ def to_delete():
     pass
 
 #数据预处理
-def preprocess_data(path_corpus, path_vocab, vocab_size, path_train_raw, path_train_done):
+def preprocess_data(path_corpus, path_vocab, vocab_size, path_train_raw, path_train_done, target_seq, max_len):
     data = read_file(path_corpus)
     word2id_vocab_,vocab_size_ = nn_lib.build_word2id_vocab(data,path_vocab,vocab_size=vocab_size)
     word2id_vocab,vocab_size = nn_lib.read_word2id_dict(path_vocab)
     data = read_file(path_train_raw)
     data_ = []
     for line in data:
-        line_ = nn_lib.sentence2id(line+["<EOS>"],word2id_vocab)
+        line_ = nn_lib.sentence2id(line, word2id_vocab)
+        if False == target_seq:
+            line_ = line_[:max_len-1]+[word2id_vocab['<EOS>']]
+        elif True == target_seq:
+            line_ = [word2id_vocab['<SOS>']]+line_[:max_len-2]+[word2id_vocab['<EOS>']]
         data_.append(" ".join([str(id) for id in line_])+u"\n")
     write_file(path_train_done, data_)
     return data,data_
 
 if __name__ == "__main__":
     if False:
-        preprocess_data(path_corpus_zh, path_vocab_zh, vocab_size_zh, path_train_raw_zh, path_train_done_zh)
-        preprocess_data(path_corpus_en, path_vocab_en, vocab_size_en, path_train_raw_en, path_train_done_en)
+        preprocess_data(path_corpus_zh, path_vocab_zh, vocab_size_zh, path_train_raw_zh, path_train_done_zh, target_seq=True, max_len=100)
+        preprocess_data(path_corpus_en, path_vocab_en, vocab_size_en, path_train_raw_en, path_train_done_en, target_seq=False, max_len=200)
     if True:
-        data_zh = read_file(path_train_done_zh)
-        data_en = read_file(path_train_done_en)
+        x = read_file(path_train_done_en)
+        y = read_file(path_train_done_zh)
+        random_seed = int(time.time())
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1, random_state=random_seed)
+        # model = NeuralNetwork(x_train, y_train, task_type='seq_generation', \
+        #                        model_type='seq2seq', loss_fun_type='bilstm_crf', \
+        #                        eval_score_type='bilstm_crf_loss', optimizer_type='Adam', \
+        #                        model_parameter={'word_embd_pretrain': None, \
+        #                                         'keep_prob': 0.8, \
+        #                                         'vocab_num': vocab_size, \
+        #                                         'word_embd_dim': word_embd_dim, \
+        #                                         'label_num': len(label2id), \
+        #                                         'dim_lstm': dim_lstm}, \
+        #                        hyper_parameter={'learning_rate': learning_rate, \
+        #                                         'batch_size': batch_size, \
+        #                                         'model_save_rounds': 50, \
+        #                                         'early_stop_rounds': 150}, \
+        #                        path_data=path_ner)
+        # # 训练
+        # if False:
+        #     model.train(transfer_learning=False, built_in_test=True, x_test=x_test, y_test=y_test)
+
+        print(1)
+
 
 
 
