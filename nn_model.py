@@ -147,7 +147,7 @@ def bilstm_crf(x, keep_prob, dim_lstm, label_num, word_embd_pretrain=None, vocab
 """===================================================seq2seq模型==================================================="""
 
 
-def seq2seq(x, y, keep_prob, is_predict, dim_lstm, word_embd_dim=None,
+def seq2seq(x, y, keep_prob, is_predict, dim_lstm, word_embd_dim,
             encoder_word_embd_pretrain=None, encoder_vocab_size=None,
             decoder_word_embd_pretrain=None, decoder_vocab_size=None):
     with tf.variable_scope('encoder'):
@@ -155,7 +155,10 @@ def seq2seq(x, y, keep_prob, is_predict, dim_lstm, word_embd_dim=None,
         # x:[batch_size,step_len]
         # TODO: layer_output = [tf.convert_to_tensor(x)]
         encoder = [x]
-        batch_size = encoder[0].get_shape()[0].value
+        # batch_size = encoder[0].get_shape()[0].value
+        batch_size = 1024
+        print(type(encoder[0]))
+        print(encoder[0].get_shape())
         encoder_seq_max_len = encoder[0].get_shape()[1].value
         encoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(encoder[0]), axis=1), tf.int32)
         # encoder[1] 对源序列数据进行embedding
@@ -174,6 +177,7 @@ def seq2seq(x, y, keep_prob, is_predict, dim_lstm, word_embd_dim=None,
                                                                           inputs=encoder[1],
                                                                           sequence_length=encoder_seq_len,
                                                                           dtype=tf.float32)
+        print(encoder_states.get_shape())
         memory = tf.concat(encoder_outputs, axis=2)
         encoder.append(memory)
         '''
@@ -197,15 +201,15 @@ def seq2seq(x, y, keep_prob, is_predict, dim_lstm, word_embd_dim=None,
         decoder_cell_raw = tf.nn.rnn_cell.BasicLSTMCell(dim_lstm)
         decoder_cell = tf.nn.rnn_cell.DropoutWrapper(cell=decoder_cell_raw, output_keep_prob=keep_prob)
         output_layer = None
-        decoder_initial_state = decoder_cell.zero_state(batch_size, tf.float32).clone(cell_state=encoder_states)
         # 封装copynet模块
-        nn_lib.CopyNetWrapper(cell=decoder_cell,
-                              encoder_states=memory,
-                              encoder_input_ids=encoder[0],
-                              vocab_size=encoder_vocab_size,
-                              gen_vocab_size=decoder_vocab_size,
-                              encoder_state_size=decoder_cell.output_size*2,
-                              initial_cell_state=None)
+        decoder_cell = nn_lib.CopyNetWrapper(cell=decoder_cell,
+                                             encoder_states=memory,
+                                             encoder_input_ids=encoder[0],
+                                             vocab_size=encoder_vocab_size,
+                                             gen_vocab_size=decoder_vocab_size,
+                                             encoder_state_size=decoder_cell.output_size*2,
+                                             initial_cell_state=None)
+        decoder_initial_state = decoder_cell.zero_state(batch_size, tf.float32).clone(cell_state=encoder_states)
         if False == is_predict:
             # 获取目标序列信息
             # TODO: layer_output = [tf.convert_to_tensor(x)]
@@ -230,8 +234,8 @@ def seq2seq(x, y, keep_prob, is_predict, dim_lstm, word_embd_dim=None,
             # sos_ids = tf.fill([batch_size], decoder_vocab['<SOS>'])
             # eos_id = decoder_vocab['<EOS>']
             # '<SOS>'的词表id为1，'<EOS>'的词表id为2。
-            sos_ids = tf.fill([batch_size], '1')
-            eos_id = '2'
+            sos_ids = tf.fill([batch_size], tf.cast(1,tf.int32))
+            eos_id = tf.cast(2,tf.int32)
             decoder_help = tf.contrib.seq2seq.BeamSearchDecoder(cell=decoder_cell,
                                                                 embedding=decoder_word_embd,
                                                                 start_tokens=sos_ids,
@@ -406,7 +410,7 @@ def fm(x, dim_x, dim_y, dim_lv):
 # idx to embedding
 def get_word_embd(word_embd_pretrain=None, vocab_size=None, word_embd_dim=None, name='word_embd'):
     # word_embd:[batch_size,step_len,embd_dim]
-    if word_embd_pretrain:
+    if word_embd_pretrain is not None:
         word_embd = tf.get_variable(name=name, trainable=True, initializer=word_embd_pretrain)
         vocab_size = word_embd.shape[0].value
         word_embd_dim = word_embd.shape[1].value

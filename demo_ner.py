@@ -24,8 +24,8 @@ import nn_lib
 
 path_nlp = u'.\\data\\'
 path_ner = path_nlp+u'ner\\'
-word_embd_dim = 300
-dim_lstm = 300
+word_embd_dim = 600
+dim_lstm = 600
 learning_rate = 0.001
 batch_size = 1024
 

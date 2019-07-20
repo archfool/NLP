@@ -87,6 +87,11 @@ def sentence2id(sent, word2id_vocab, retain_eng=True, retain_digit=True):
         sentence_id.append(word2id_vocab[word])
     return sentence_id
 
+#将一个句子补0至固定长度
+def pad_seq(seq, max_len, pad_mark=0):
+    seq = seq[:max_len] + [pad_mark] * max(max_len - len(seq), 0)
+    return seq
+
 #将句子序列补0至固定长度
 def pad_sequences(sequences, max_seq_len, pad_mark=0):
     #sequences = [seq_1,seq_2,...,seq_n]

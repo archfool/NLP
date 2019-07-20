@@ -70,7 +70,7 @@ class NeuralNetwork(object):
             #         self.x = x
             #         self.dim_x = self.x.shape[1]
             x = np.array(x)
-            if not x.any():
+            if x.any() is False:
                 print('input data x is empty!')
                 return None
             else:
@@ -584,6 +584,7 @@ class NeuralNetwork(object):
             self.x_ph = tf.placeholder('int32', [None, self.dim_x], name='x')
             self.y_ph = tf.placeholder('int32', [None, self.dim_y], name='y')
             self.keep_prob_ph = tf.placeholder('float32', name='keep_prob')
+            self.is_predict_ph = tf.placeholder('bool', name='is_predict')
             self.encoder, self.decoder = nn_model.seq2seq(self.x_ph, self.y_ph, self.keep_prob_ph,
                                                           self.is_predict, self.dim_lstm, self.word_embd_dim,
                                                           self.encoder_word_embd_pretrain, self.encoder_vocab_size,
@@ -640,6 +641,13 @@ class NeuralNetwork(object):
                 feed_dict[self.keep_prob_ph] = 1.0
             else:
                 feed_dict[self.keep_prob_ph] = self.keep_prob
+        elif self.model_type == 'seq2seq':
+            if predict is True:
+                feed_dict[self.keep_prob_ph] = 1.0
+                feed_dict[self.is_predict_ph] = True
+            else:
+                feed_dict[self.keep_prob_ph] = self.keep_prob
+                feed_dict[self.is_predict_ph] = False
         elif self.model_type == 'bilstm_crf':
             if predict is True:
                 feed_dict[self.keep_prob_ph] = 1.0

@@ -116,6 +116,7 @@ def preprocess_data(path_corpus, path_vocab, vocab_size, path_train_raw, path_tr
             line_ = line_[:max_len-1]+[word2id_vocab['<EOS>']]
         elif True == target_seq:
             line_ = [word2id_vocab['<SOS>']]+line_[:max_len-2]+[word2id_vocab['<EOS>']]
+        line_ = nn_lib.pad_seq(line_, max_len)
         data_.append(" ".join([str(id) for id in line_])+u"\n")
     write_file(path_train_done, data_)
     return data,data_
@@ -126,26 +127,30 @@ if __name__ == "__main__":
         preprocess_data(path_corpus_en, path_vocab_en, vocab_size_en, path_train_raw_en, path_train_done_en, target_seq=False, max_len=200)
     if True:
         x = read_file(path_train_done_en)
+        x = np.array(x).astype(int)
         y = read_file(path_train_done_zh)
+        y = np.array(y).astype(int)
         random_seed = int(time.time())
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1, random_state=random_seed)
-        # model = NeuralNetwork(x_train, y_train, task_type='seq_generation', \
-        #                        model_type='seq2seq', loss_fun_type='bilstm_crf', \
-        #                        eval_score_type='bilstm_crf_loss', optimizer_type='Adam', \
-        #                        model_parameter={'word_embd_pretrain': None, \
-        #                                         'keep_prob': 0.8, \
-        #                                         'vocab_num': vocab_size, \
-        #                                         'word_embd_dim': word_embd_dim, \
-        #                                         'label_num': len(label2id), \
-        #                                         'dim_lstm': dim_lstm}, \
-        #                        hyper_parameter={'learning_rate': learning_rate, \
-        #                                         'batch_size': batch_size, \
-        #                                         'model_save_rounds': 50, \
-        #                                         'early_stop_rounds': 150}, \
-        #                        path_data=path_ner)
-        # # 训练
-        # if False:
-        #     model.train(transfer_learning=False, built_in_test=True, x_test=x_test, y_test=y_test)
+        model = NeuralNetwork(x_train, y_train,
+                              task_type='seq_generation', model_type='seq2seq',
+                              loss_fun_type='cross_entropy', eval_score_type='cross_entropy', optimizer_type='Adam',
+                              model_parameter={'keep_prob': 1.0,
+                                               # 'is_predict':False;
+                                               'dim_lstm': dim_lstm,
+                                               'word_embd_dim': word_embd_dim,
+                                               'encoder_word_embd_pretrain': None,
+                                               'encoder_vocab_size':vocab_size_en,
+                                               'decoder_word_embd_pretrain': None,
+                                               'decoder_vocab_size': vocab_size_zh},
+                              hyper_parameter={'learning_rate': learning_rate,
+                                               'batch_size': batch_size,
+                                               'model_save_rounds': 50,
+                                               'early_stop_rounds': 150},
+                              path_data=path_seq2seq)
+        # 训练
+        if True:
+            model.train(transfer_learning=False, built_in_test=True, x_test=x_test, y_test=y_test)
 
         print(1)
 
