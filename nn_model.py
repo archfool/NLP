@@ -8,9 +8,11 @@ Created on Fri May  3 16:48:57 2019
 import tensorflow as tf
 import numpy as np
 import math
-from tensorflow.python.layers.core import Dense
+from tensorflow.python.ops import variable_scope
+from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import nn_ops
+from tensorflow.python.ops import math_ops
 import nn_lib
-
 
 """===================================================mlp模型==================================================="""
 
@@ -24,23 +26,27 @@ def mlp(x, keep_prob, activation_fun, layer_num, dim):
                                           inputs=layer_output[i-1],
                                           dim_in=dim[i-1],
                                           dim_out=dim[i],
+                                          use_bias=True,
                                           activation_fun=activation_fun[i-1],
                                           keep_prob=keep_prob[i-1]))
     return layer_output
 
 
 # mlp加一层
-def add_mlp_layer(layer_name, inputs, dim_in, dim_out, activation_fun=None, keep_prob=1.0):
+def add_mlp_layer(layer_name, inputs, dim_in, dim_out, use_bias=True, activation_fun=None, keep_prob=1.0):
     with tf.variable_scope(layer_name):
         # 定义权重w
         weight = tf.get_variable(
             name='weight', trainable=True,
             initializer=tf.truncated_normal([dim_in, dim_out], stddev=math.sqrt(6/(dim_in+dim_out)), dtype=tf.float32))
-        # 定义偏置b
-        bias = tf.get_variable(name='bias', trainable=True,
-                               initializer=tf.truncated_normal([dim_out], stddev=0.1, dtype=tf.float32))
-        # 全连接层，计算x*w+b
-        fc = tf.add(tf.matmul(tf.cast(inputs, tf.float32), weight), bias)
+        if use_bias is True:
+            # 定义偏置b
+            bias = tf.get_variable(name='bias', trainable=True,
+                                   initializer=tf.truncated_normal([dim_out], stddev=0.1, dtype=tf.float32))
+            # 全连接层，计算x*w+b
+            fc = tf.add(tf.matmul(tf.cast(inputs, tf.float32), weight), bias)
+        else:
+            fc = tf.matmul(tf.cast(inputs, tf.float32), weight)
         # 丢弃层
         dropout = tf.nn.dropout(fc, keep_prob)
         # 使用激活函数
@@ -57,7 +63,7 @@ def add_mlp_layer(layer_name, inputs, dim_in, dim_out, activation_fun=None, keep
 
 
 # 带有embedding的RNN模型
-def rnn_nlp(x, keep_prob, word_embd_pretrain, dim_lstm, dim_y):
+def rnn_nlp(x, keep_prob, word_embd_pretrain, dim_rnn, dim_y):
     with tf.variable_scope('rnn_nlp'):
         # layer[0] 输入数据，未embedding前
         # x:[batch,step]
@@ -67,7 +73,7 @@ def rnn_nlp(x, keep_prob, word_embd_pretrain, dim_lstm, dim_y):
         embedding_w2v = tf.nn.embedding_lookup(word_embd_pretrain, layer_output[0])
         layer_output.append(embedding_w2v)
         # layer[2] 生成lstm实体，并进行dropout
-        lstm_cell_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_lstm, state_is_tuple=True)
+        lstm_cell_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_rnn, state_is_tuple=True)
         lstm_cell = tf.nn.rnn_cell.DropoutWrapper(cell=lstm_cell_raw, output_keep_prob=keep_prob)
         lstm_layer = tf.nn.dynamic_rnn(lstm_cell, layer_output[1], dtype=tf.float32)[0]
         layer_output.append(lstm_layer)
@@ -75,11 +81,11 @@ def rnn_nlp(x, keep_prob, word_embd_pretrain, dim_lstm, dim_y):
         # transpose:[step,batch,embd]
         transpose = tf.transpose(layer_output[2], [1, 0, 2])
         # transpose_gather:[batch,embd]提取lstm最后一个时刻的output数据
-        transpose_gather = tf.gather(transpose, int(transpose.get_shape()[0].value)-1)
+        transpose_gather = tf.gather(transpose, int(transpose.shape[0].value)-1)
         layer_output.append(transpose_gather)
         # layer[4] 全连接层
         weight = tf.get_variable(name='weight', trainable=True,
-                    initializer=tf.truncated_normal([dim_lstm, dim_y], stddev=math.sqrt(6/(dim_lstm+dim_y)), dtype=tf.float32))
+                    initializer=tf.truncated_normal([dim_rnn, dim_y], stddev=math.sqrt(6/(dim_rnn+dim_y)), dtype=tf.float32))
         bias = tf.get_variable(name='bias', trainable=True,
                                initializer=tf.truncated_normal([dim_y], stddev=0.1, dtype=tf.float32))
         layer_output.append((tf.matmul(layer_output[3], weight) + bias))
@@ -90,13 +96,13 @@ def rnn_nlp(x, keep_prob, word_embd_pretrain, dim_lstm, dim_y):
 
 
 # BiLSTM_CRF模型
-def bilstm_crf(x, keep_prob, dim_lstm, label_num, word_embd_pretrain=None, vocab_size=None, word_embd_dim=None):
+def bilstm_crf(x, keep_prob, dim_rnn, label_num, word_embd_pretrain=None, vocab_size=None, word_embd_dim=None):
     with tf.variable_scope('bilstm_layer'):
         # layer[0] 输入数据，已onehot，未embedding
         # x:[batch_size,step_len]
         layer_output = [x]
-        # batch_len = layer_output[0].get_shape()[0].value
-        step_len = layer_output[0].get_shape()[1].value
+        # batch_len = layer_output[0].shape[0].value
+        step_len = layer_output[0].shape[1].value
         seq_len = tf.cast(tf.reduce_sum(tf.sign(layer_output[0]), axis=1), tf.int32)
         # layer[1] 进行embedding
         # word_embd:[batch_size,step_len,embd_dim]
@@ -114,9 +120,9 @@ def bilstm_crf(x, keep_prob, dim_lstm, label_num, word_embd_pretrain=None, vocab
         embedding_w2v = tf.nn.embedding_lookup(word_embd, layer_output[0])
         layer_output.append(embedding_w2v)
         # layer[2] 生成BiLSTM实体，并进行dropout
-        # lstm_layer:[batch_size,step_len,dim_lstm*2]
-        lstm_cell_fw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_lstm, state_is_tuple=True)
-        lstm_cell_bw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_lstm, state_is_tuple=True)
+        # lstm_layer:[batch_size,step_len,dim_rnn*2]
+        lstm_cell_fw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_rnn, state_is_tuple=True)
+        lstm_cell_bw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_rnn, state_is_tuple=True)
         lstm_cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell=lstm_cell_fw_raw, output_keep_prob=keep_prob)
         lstm_cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell=lstm_cell_bw_raw, output_keep_prob=keep_prob)
         lstm_layer_raw, _ = tf.nn.bidirectional_dynamic_rnn(lstm_cell_fw, lstm_cell_bw, layer_output[1],
@@ -127,10 +133,10 @@ def bilstm_crf(x, keep_prob, dim_lstm, label_num, word_embd_pretrain=None, vocab
         lstm_layer = tf.concat(lstm_layer_raw, axis=2)
         layer_output.append(lstm_layer)
         # layer[3] 全连接层
-        fc_hidden_raw = tf.reshape(layer_output[2], shape=[-1, dim_lstm*2])
+        fc_hidden_raw = tf.reshape(layer_output[2], shape=[-1, dim_rnn*2])
         weight = tf.get_variable(
             name='weight', trainable=True,
-            initializer=tf.truncated_normal([dim_lstm*2, label_num], stddev=math.sqrt(6/(dim_lstm*2+label_num)), dtype=tf.float32)
+            initializer=tf.truncated_normal([dim_rnn*2, label_num], stddev=math.sqrt(6/(dim_rnn*2+label_num)), dtype=tf.float32)
         )
         bias = tf.get_variable(
             name='bias', trainable=True,
@@ -147,19 +153,72 @@ def bilstm_crf(x, keep_prob, dim_lstm, label_num, word_embd_pretrain=None, vocab
 """===================================================seq2seq模型==================================================="""
 
 
-def seq2seq(x, y, keep_prob, is_predict, dim_lstm, word_embd_dim,
+def seq2seq(x, y, keep_prob, batch_size, train_or_infer,
+            dim_rnn, word_embd_dim,
             encoder_word_embd_pretrain=None, encoder_vocab_size=None,
             decoder_word_embd_pretrain=None, decoder_vocab_size=None):
     with tf.variable_scope('encoder'):
-        # encoder[0] 输入数据，已onehot，未embedding
-        # x:[batch_size,step_len]
-        # TODO: layer_output = [tf.convert_to_tensor(x)]
+        # encoder[0] [batch_size,step_len]:源序列，已onehot，未embedding，类型np.array
         encoder = [x]
-        # batch_size = encoder[0].get_shape()[0].value
-        batch_size = 1024
-        print(type(encoder[0]))
-        print(encoder[0].get_shape())
-        encoder_seq_max_len = encoder[0].get_shape()[1].value
+        encoder_seq_max_len = encoder[0].shape[1].value
+        encoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(encoder[0]), axis=1), tf.int32)
+        # encoder[1] 对源序列数据进行embedding
+        encoder_word_embd, encoder_vocab_size, word_embd_dim \
+            = built_word_embd(encoder_word_embd_pretrain, encoder_vocab_size, word_embd_dim, name='encoder_word_embd')
+        encoder_w2v = tf.nn.embedding_lookup(encoder_word_embd, encoder[0])
+        encoder.append(encoder_w2v)
+        # encoder[2] ([batch_size,step_len,dim_rnn*2],...):构建encoder模型，并使用dynamic_rnn方法
+        encoder_cell_fw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_rnn, state_is_tuple=True)
+        encoder_cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell=encoder_cell_fw_raw, output_keep_prob=keep_prob)
+        encoder_cell_bw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_rnn, state_is_tuple=True)
+        encoder_cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell=encoder_cell_bw_raw, output_keep_prob=keep_prob)
+        encoder_outputs, state = tf.nn.bidirectional_dynamic_rnn(cell_fw=encoder_cell_fw,
+                                                                 cell_bw=encoder_cell_bw,
+                                                                 inputs=encoder[1],
+                                                                 sequence_length=encoder_seq_len,
+                                                                 dtype=tf.float32)
+        memory = tf.concat(encoder_outputs, axis=2)
+        init_state = BiLSTM_init_state_to_LSTM(BiLSTM_state=state, fill_zero=False)
+        encoder.append((memory, init_state))
+    with tf.variable_scope('decoder'):
+        # decoder[0] [batch_size,step_len]:源序列，已onehot，未embedding，类型np.array
+        decoder = [x]
+        decoder_seq_max_len = decoder[0].shape[1].value
+        decoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(decoder[0]), axis=1), tf.int32)
+        # decoder[1] 对源序列数据进行embedding
+        decoder_word_embd, decoder_vocab_size, word_embd_dim \
+            = built_word_embd(decoder_word_embd_pretrain, decoder_vocab_size, word_embd_dim, name='decoder_word_embd')
+        decoder_w2v = tf.nn.embedding_lookup(decoder_word_embd, decoder[0])
+        decoder.append(decoder_w2v)
+        # decoder[2] 构建decoder模型
+        decoder_cell_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_rnn, state_is_tuple=True)
+        decoder_cell = tf.nn.rnn_cell.DropoutWrapper(cell=decoder_cell_raw, output_keep_prob=keep_prob)
+        with tf.variable_scope('Generator_Network'):
+            pass
+        with tf.variable_scope('Pointer_Network'):
+            pass
+
+        # 训练模式
+        if 'train' == train_or_infer:
+            pass
+        # 预测模式
+        elif 'infer' == train_or_infer:
+            pass
+        else:
+            print("value of 'train_or_infer' is error!!!")
+    return encoder, decoder
+
+
+
+def seq2seq_old(x, y, keep_prob, batch_size, train_or_infer,
+            dim_lstm, word_embd_dim,
+            encoder_word_embd_pretrain=None, encoder_vocab_size=None,
+            decoder_word_embd_pretrain=None, decoder_vocab_size=None):
+    with tf.variable_scope('encoder'):
+        # encoder[0] 输入数据，已onehot，未embedding，类型np.array
+        # x:[batch_size,step_len]
+        encoder = [x]
+        encoder_seq_max_len = encoder[0].shape[1].value
         encoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(encoder[0]), axis=1), tf.int32)
         # encoder[1] 对源序列数据进行embedding
         encoder_word_embd, encoder_vocab_size, word_embd_dim \
@@ -172,15 +231,16 @@ def seq2seq(x, y, keep_prob, is_predict, dim_lstm, word_embd_dim,
         lstm_cell_bw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_lstm, state_is_tuple=True)
         lstm_cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell=lstm_cell_fw_raw, output_keep_prob=keep_prob)
         lstm_cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell=lstm_cell_bw_raw, output_keep_prob=keep_prob)
-        encoder_outputs, encoder_states = tf.nn.bidirectional_dynamic_rnn(cell_fw=lstm_cell_fw,
-                                                                          cell_bw=lstm_cell_bw,
-                                                                          inputs=encoder[1],
-                                                                          sequence_length=encoder_seq_len,
-                                                                          dtype=tf.float32)
-        print(encoder_states.get_shape())
+        encoder_outputs, (encoder_state_fw, encoder_state_bw) = \
+            tf.nn.bidirectional_dynamic_rnn(cell_fw=lstm_cell_fw,
+                                            cell_bw=lstm_cell_bw,
+                                            inputs=encoder[1],
+                                            sequence_length=encoder_seq_len,
+                                            dtype=tf.float32)
         memory = tf.concat(encoder_outputs, axis=2)
         encoder.append(memory)
         '''
+        an useful process method:
         lstm_state_as_tensor_shape = [num_layers, 2, batch_size, hidden_size]
         initial_state = tf.zeros(lstm_state_as_tensor_shape)
         unstack_state = tf.unstack(initial_state, axis=0)
@@ -198,7 +258,7 @@ def seq2seq(x, y, keep_prob, is_predict, dim_lstm, word_embd_dim,
             = get_word_embd(decoder_word_embd_pretrain, decoder_vocab_size, word_embd_dim, name='decoder_word_embd')
         # decoder[1] 构建encoder模型，并使用dynamic_rnn方法
         # 构建decoder模型
-        decoder_cell_raw = tf.nn.rnn_cell.BasicLSTMCell(dim_lstm)
+        decoder_cell_raw = tf.nn.rnn_cell.BasicLSTMCell(dim_lstm, state_is_tuple=True)
         decoder_cell = tf.nn.rnn_cell.DropoutWrapper(cell=decoder_cell_raw, output_keep_prob=keep_prob)
         output_layer = None
         # 封装copynet模块
@@ -209,11 +269,12 @@ def seq2seq(x, y, keep_prob, is_predict, dim_lstm, word_embd_dim,
                                              gen_vocab_size=decoder_vocab_size,
                                              encoder_state_size=decoder_cell.output_size*2,
                                              initial_cell_state=None)
-        decoder_initial_state = decoder_cell.zero_state(batch_size, tf.float32).clone(cell_state=encoder_states)
-        if False == is_predict:
+        decoder_initial_state = decoder_cell.zero_state(batch_size, tf.float32).clone(cell_state=encoder_state)
+        # 训练模式
+        if 'train' == train_or_infer:
             # 获取目标序列信息
             # TODO: layer_output = [tf.convert_to_tensor(x)]
-            decoder_seq_max_len = decoder[0].get_shape()[1].value
+            decoder_seq_max_len = decoder[0].shape[1].value
             decoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(decoder[0]), axis=1), tf.int32)
             # 对目标序列数据进行embedding
             decoder_embedding_w2v = tf.nn.embedding_lookup(decoder_word_embd, decoder[0])
@@ -228,7 +289,8 @@ def seq2seq(x, y, keep_prob, is_predict, dim_lstm, word_embd_dim,
             print("\n", type(decoder_outputs), decoder_outputs.__len__(), "\n")
             print("\n", type(decoder_outputs[0]), decoder_outputs[0].__len__(), "\n")
             print("\n", type(decoder_outputs[1]), decoder_outputs[1].__len__(), "\n")
-        elif True == is_predict:
+        # 预测模式
+        elif 'infer' == train_or_infer:
             # 使用dynamic_rnn方法
             beam_width = 3
             # sos_ids = tf.fill([batch_size], decoder_vocab['<SOS>'])
@@ -256,6 +318,7 @@ def seq2seq(x, y, keep_prob, is_predict, dim_lstm, word_embd_dim,
         else:
             print("value of predict is error!!!")
     return encoder, decoder
+
 #     with tf.variable_scope('decoder_old'):
 #         """定义解码器的word_embedding"""
 #         decoder_word_embd, decoder_vocab_size, word_embd_dim \
@@ -289,7 +352,7 @@ def seq2seq(x, y, keep_prob, is_predict, dim_lstm, word_embd_dim,
 #                                     maximum_iterations=maximum_iterations)
 #             translations = decoder_outputs.sample_id
 #         elif False==predict:
-# #            decoder_step_len = y.get_shape()[1].value
+# #            decoder_step_len = y.shape[1].value
 #             decoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(y), axis=1),tf.int32)
 #             decoder_embedding_w2v = tf.nn.embedding_lookup(decoder_word_embd, y)
 #             helper = nn_lib.CopyNetTrainingHelper(inputs=decoder_embedding_w2v,\
@@ -407,8 +470,8 @@ def fm(x, dim_x, dim_y, dim_lv):
 #         return output
 
 
-# idx to embedding
-def get_word_embd(word_embd_pretrain=None, vocab_size=None, word_embd_dim=None, name='word_embd'):
+# built word embedding
+def built_word_embd(word_embd_pretrain=None, vocab_size=None, word_embd_dim=None, name='word_embd'):
     # word_embd:[batch_size,step_len,embd_dim]
     if word_embd_pretrain is not None:
         word_embd = tf.get_variable(name=name, trainable=True, initializer=word_embd_pretrain)
@@ -419,11 +482,65 @@ def get_word_embd(word_embd_pretrain=None, vocab_size=None, word_embd_dim=None, 
         return
     else:
         # 在word_embd_pretrain==[]时，需要根据词表大小vocab_size和词向量维度word_embd_dim，建立嵌入词向量word2vec
-        word_embd = tf.get_variable(name=name, trainable=True,
-                                    initializer=tf.random_uniform(
-                                        (vocab_size, word_embd_dim), minval=-1, maxval=1, dtype=tf.float32)
-                                    )
+        initializer = tf.random_uniform(shape=(vocab_size, word_embd_dim), minval=-1, maxval=1, dtype=tf.float32)
+        # initializer = tf.truncated_normal(shape=(vocab_size, word_embd_dim), mean=0.0, stddev=1.0, dtype=tf.float32)
+        word_embd = tf.get_variable(name=name, trainable=True, initializer=initializer)
     return word_embd, vocab_size, word_embd_dim
 
+
+#BiLSTM state to LSTM init_state
+def BiLSTM_init_state_to_LSTM(BiLSTM_state=None, fill_zero=False):
+    if BiLSTM_state is None and fill_zero is False:
+        print('ERROR:BiLSTM_state is None and fill_zero is False!!!')
+        return None
+    elif BiLSTM_state is not None:
+        ((c_fw, h_fw), (c_bw, h_bw)) = BiLSTM_state
+        if fill_zero is False:
+            c_concat = tf.concat((tf.expand_dims(c_fw, axis=2), tf.expand_dims(c_bw, axis=2)), axis=2)
+            c = tf.reduce_mean(c_concat, axis=2)
+            h_concat = tf.concat((tf.expand_dims(h_fw, axis=2), tf.expand_dims(h_bw, axis=2)), axis=2)
+            h = tf.reduce_mean(h_concat, axis=2)
+    return tf.contrib.rnn.LSTMStateTuple(c, h)
+'''
+an useful process method:
+lstm_state_as_tensor_shape = [num_layers, 2, batch_size, hidden_size]
+initial_state = tf.zeros(lstm_state_as_tensor_shape)
+unstack_state = tf.unstack(initial_state, axis=0)
+tuple_state = tuple(
+    [tf.contrib.rnn.LSTMStateTuple(unstack_state[idx][0], unstack_state[idx][1]) for idx in range(num_layers)])
+inputs = tf.unstack(inputs, num=num_steps, axis=1)
+outputs, state_out = tf.contrib.rnn.static_rnn(cell, inputs, initial_state=tuple_state)
+'''
+'''
+      # Define weights and biases to reduce the cell and reduce the state
+      w_reduce_c = tf.get_variable('w_reduce_c', [hidden_dim * 2, hidden_dim], dtype=tf.float32, initializer=self.trunc_norm_init)
+      w_reduce_h = tf.get_variable('w_reduce_h', [hidden_dim * 2, hidden_dim], dtype=tf.float32, initializer=self.trunc_norm_init)
+      bias_reduce_c = tf.get_variable('bias_reduce_c', [hidden_dim], dtype=tf.float32, initializer=self.trunc_norm_init)
+      bias_reduce_h = tf.get_variable('bias_reduce_h', [hidden_dim], dtype=tf.float32, initializer=self.trunc_norm_init)
+
+      # Apply linear layer
+      old_c = tf.concat(axis=1, values=[fw_st.c, bw_st.c]) # Concatenation of fw and bw cell
+      old_h = tf.concat(axis=1, values=[fw_st.h, bw_st.h]) # Concatenation of fw and bw state
+      new_c = tf.nn.relu(tf.matmul(old_c, w_reduce_c) + bias_reduce_c) # Get new cell from old cell
+      new_h = tf.nn.relu(tf.matmul(old_h, w_reduce_h) + bias_reduce_h) # Get new state from old state
+      return tf.contrib.rnn.LSTMStateTuple(new_c, new_h) # Return new cell and state
+'''
+
+
+# Attention Mechanism
+def attention_mechanism(memory, decoder_state, encoder_seq_len):
+    with tf.variable_scope('encoder_feature'):
+        # memory:[batch_size, step_len, dim_rnn * 2]
+        batch_size = memory.shape[0].value
+        step_len = memory.shape[1].value
+        dim_bi_rnn = memory.shape[2].value
+        # memory_expand: [batch_size, step_len, 1, dim_rnn*2]
+        memory_expand = tf.expand_dims(memory, axis=2)
+        w_memory = tf.get_variable(name="w_memory", shape=[1, 1, dim_bi_rnn, dim_bi_rnn])
+        # encoder_context: [batch_size, step_len, 1, dim_rnn*2]
+        encoder_context = nn_ops.conv2d(memory_expand, w_memory, [1, 1, 1, 1], "SAME")
+    with tf.variable_scope('decoder_feature'):
+        pass
+    v = tf.get_variable(name="v", shape=[dim_bi_rnn])
 
 

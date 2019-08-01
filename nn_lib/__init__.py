@@ -7,7 +7,8 @@ Created on Sun Jun 16 11:43:26 2019
 
 from nn_lib.utils import *
 from nn_lib.crf import *
-from nn_lib.copynet import *
+# from nn_lib.ptrnet_attention_decoder import *
+# from nn_lib.ptrnet_model import *
 
 
 #from nn_lib.attention_wrapper import *
