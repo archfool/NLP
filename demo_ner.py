@@ -150,7 +150,7 @@ if __name__=='__main__':
              '福宏小区','水涧新村','省工商银行宿舍']
         word_label_list_1 = ner_predict(model,x_tmp,word2id,label2id,max_len=None,do_word2id=True)
         #模式二（不常用）
-        # word_label_list_2 = ner_predict(model,x_test,word2id,label2id,max_len=max_seq_len,do_word2id=False)
+        word_label_list_2 = ner_predict(model,x_test,word2id,label2id,max_len=max_seq_len,do_word2id=False)
     #导出模型参数
     if False:
         model.params_output()

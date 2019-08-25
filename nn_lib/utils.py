@@ -12,6 +12,13 @@ import pickle
 import os
 import random
 
+word2id_list_const = {
+    '<PAD>':0,
+    '<SOS>':1,
+    '<EOS>':2,
+    '<UNK>':3
+}
+
 
 #加载停用词表
 def get_stopwords(path_data=None):
