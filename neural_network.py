@@ -15,6 +15,7 @@ import math
 import os
 import gc
 import nn_model
+import model_seq2seq
 from sklearn.preprocessing import StandardScaler
 import logging
 import nn_lib

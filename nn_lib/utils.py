@@ -19,7 +19,6 @@ word2id_list_const = {
     '<UNK>':3
 }
 
-
 #加载停用词表
 def get_stopwords(path_data=None):
     if path_data==None:
@@ -48,6 +47,8 @@ def build_word2id_vocab(data, vocab_saved_path, vocab_size=None, language='chs',
             vocab_size = 4000
         elif 'eng'==language:
             vocab_size = 8000
+        else:
+            print('Absence of vocab_size and language!')
     #简历word2id字典变量
     word2id = {}
     for sentence in data:
@@ -66,7 +67,7 @@ def build_word2id_vocab(data, vocab_saved_path, vocab_size=None, language='chs',
     #根据词表大小，筛选出高频词
     word2id_list = sorted(word2id.items(), key=lambda word2id: word2id[1], reverse=True)[:vocab_size]
     #加上保留符号
-    word2id_list = ['<PAD>','<SOS>','<EOS>','<UNK>']+[word for word,word_freq in word2id_list]
+    word2id_list = [tag for tag in word2id_list_const.keys()]+[word for word,word_freq in word2id_list]
     #将词表由列表格式转换为字典格式
     word2id = {word:id for word,id in zip(word2id_list, range(len(word2id_list)))}
     with open(vocab_saved_path, 'wb') as file:
