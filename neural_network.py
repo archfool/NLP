@@ -279,6 +279,14 @@ class NeuralNetwork(object):
             loss = tf.reduce_mean(tf.abs(tf.subtract(model_out, self.y_ph)))
         elif self.loss_fun_type == 'cross_entropy':
             loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=model_out, labels=self.y_ph))
+        elif self.loss_fun_type == 'cross_entropy_seq2seq':
+            step_len_max = len(model_out)
+            batch_size = model_out[0].shape[0].value
+            vocab_size = model_out[0].shape[1].value
+            y_true = [tf.reshape(tf.one_hot(indices=self.y_ph[:, step_num], depth= vocab_size), [batch_size, vocab_size])
+                      for step_num in range(step_len_max)]
+            loss_step = [tf.nn.softmax_cross_entropy_with_logits(logits=y_, labels=y) for y, y_ in zip(y_true, model_out)]
+            loss = tf.reduce_mean(loss_step)
         elif self.loss_fun_type == 'bilstm_crf':
             log_likelihood, self.transition_score_matrix =\
                 nn_lib.crf_log_likelihood(inputs=self.layer_output[-1],

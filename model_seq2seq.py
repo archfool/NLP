@@ -357,7 +357,7 @@ def seq2seq_old(x, y, keep_prob, batch_size, train_or_infer,
             decoder_word_embd_pretrain=None, decoder_vocab_size=None):
     with tf.variable_scope('encoder'):
         # encoder[0] 输入数据，已onehot，未embedding，类型np.array
-        # x:[batch_size,step_len]
+        # x:[batch_size, step_len]
         encoder = [x]
         encoder_seq_max_len = encoder[0].shape[1].value
         encoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(encoder[0]), axis=1), tf.int32)

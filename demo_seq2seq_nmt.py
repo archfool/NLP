@@ -21,7 +21,7 @@ from neural_network import NeuralNetwork
 import nn_lib
 
 path_data = u'.\\data\\'
-path_seq2seq = path_data+u'seq2seq\\'
+path_seq2seq = path_data+u'seq2seq_nmt\\'
 # 源序列词库相关参数
 vocab_size_src = 8000
 path_corpus_src = path_seq2seq+'train.txt.en'

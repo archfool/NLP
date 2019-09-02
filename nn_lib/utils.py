@@ -38,9 +38,11 @@ def str_segment(sentence, pos=False):
         seg_list = psg.lcut(sentence)
     return seg_list
 
+
 #建立带有词频的词表
-def build_word2id_vocab(data, vocab_saved_path, vocab_size=None, language='chs', retain_eng=True, retain_digit=True):
-    # data = read_corpus(corpus_path)
+def build_word2id_vocab(data, vocab_saved_path, vocab_size=None, use_seg=False,
+                        language='chs', retain_eng=True, retain_digit=True,
+                        build_extend_vocab=False, extend_vocab_max_size=0):
     #若词表数量参数为空，则根据语言类型，配置缺省值
     if None==vocab_size:
         if 'chs'==language:
@@ -52,7 +54,10 @@ def build_word2id_vocab(data, vocab_saved_path, vocab_size=None, language='chs',
     #简历word2id字典变量
     word2id = {}
     for sentence in data:
-        sentence = list(sentence)
+        if use_seg is True:
+            sentence = str_segment(sentence, pos=False)
+        else:
+            sentence = list(sentence)
         for word in sentence:
             #替换特定领域的词汇为类型名
             if (False == retain_digit) and word.isdigit():
