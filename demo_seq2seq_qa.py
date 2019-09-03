@@ -85,6 +85,7 @@ def preprocess_data(path_vocab, path_train_raw, path_train_done, src_or_tgt, max
 
 
 if __name__ == "__main__":
+    word2id_vocab, vocab_size = nn_lib.read_word2id_dict(path_vocab)
     data_q = []
     data_a = []
     for file_name in corpus_list:
@@ -92,7 +93,7 @@ if __name__ == "__main__":
         data_q_, data_a_ = load_file(path_seq2seq+file_name)
         data_q = data_q + data_q_
         data_a = data_a + data_a_
-    word2id_vocab_, vocab_size_ = nn_lib.build_word2id_vocab(data=data_q, vocab_saved_path=path_vocab,
+    word2id_vocab_, vocab_size_ = nn_lib.build_word2id_vocab(data=data_q, saved_path=path_vocab,
                                                              vocab_size=vocab_size, use_seg=True)
     print(1)
 
