@@ -118,9 +118,9 @@ if __name__=='__main__':
                                                          retain_digit=False)
         print(vocab_size)
     if not 'x' in locals():
-        word2id,vocab_size = nn_lib.read_word2id_dict(path_ner+r'word2id.pkl')
+        word2id, vocab_size = nn_lib.read_word2id_dict(path_ner+r'word2id.pkl')
         data = read_ner_corpus(path_ner + r'train_data')
-        x,y,max_seq_len = train_data_process(data,word2id,label2id)
+        x, y, max_seq_len = train_data_process(data,word2id,label2id)
     random_seed = int(time.time())
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.05, random_state=random_seed)
     model = NeuralNetwork(x_train, y_train, task_type='classification',

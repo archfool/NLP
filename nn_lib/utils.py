@@ -11,15 +11,18 @@ import sys
 import pickle
 import os
 import random
+import re
+import traceback
+
 
 word2id_list_const = {
-    '<PAD>':0,
-    '<SOS>':1,
-    '<EOS>':2,
-    '<UNK>':3
+    '<PAD>': 0,
+    '<SOS>': 1,
+    '<EOS>': 2,
+    '<UNK>': 3
 }
 
-#加载停用词表
+# 加载停用词表
 def get_stopwords(path_data=None):
     if path_data==None:
         stopword_path = r'.\\data\\stopword.txt'
@@ -28,8 +31,9 @@ def get_stopwords(path_data=None):
     stopwords = [word.replace('\n', '') for word in open(stopword_path,encoding='utf-8').readlines()]
     return stopwords
 
-#分词
+# 分词
 def str_segment(sentence, pos=False):
+    sentence = sentence.strip()
     if not pos:
         # 不进行词性标注的分词方法
         seg_list = jieba.lcut(sentence)
@@ -39,7 +43,7 @@ def str_segment(sentence, pos=False):
     return seg_list
 
 
-#建立带有词频的词表
+# 建立带有词频的词表
 def build_word2id_vocab(data, saved_path, vocab_size=None, use_seg=False,
                         language='chs', retain_eng=True, retain_digit=True,
                         build_extend_vocab=False, extend_vocab_max_size=0):
@@ -70,7 +74,7 @@ def build_word2id_vocab(data, saved_path, vocab_size=None, use_seg=False,
             else:
                 word2id[word] += 1
     #根据词表大小，筛选出高频词
-    word2id_list = sorted(word2id.items(), key=lambda word2id: word2id[1], reverse=True)[:vocab_size]
+    word2id_list = sorted(word2id.items(), key=lambda word2id: word2id[1], reverse=True)[:vocab_size-len(word2id_list_const)]
     #加上保留符号
     word2id_list = [tag for tag in word2id_list_const.keys()]+[word for word,word_freq in word2id_list]
     #将词表由列表格式转换为字典格式
@@ -79,7 +83,7 @@ def build_word2id_vocab(data, saved_path, vocab_size=None, use_seg=False,
         pickle.dump(word2id, file)
     return word2id,len(word2id)
 
-#读取编码词典
+# 读取编码词典
 def read_word2id_dict(path):
     with open(path, 'rb') as f:
         word2id = pickle.load(f)
@@ -87,11 +91,11 @@ def read_word2id_dict(path):
     return word2id,vocab_size
 
 
-#将句子转化为ID序列
-def sentence2id(sent, word2id_vocab, retain_eng=True, retain_digit=True, use_extend_vocab=False):
+# 将句子转化为ID序列
+def sentence2id(sent, word2id_vocab, add_eos=True, retain_eng=True, retain_digit=True, build_extend_vocab=False):
     sent = list(sent)
     sentence_id = []
-    vocab_extend = []
+    vocab_extend = {}
     sentence_id_extended = []
     vocab_size = len(word2id_vocab)
     for word in sent:
@@ -101,54 +105,49 @@ def sentence2id(sent, word2id_vocab, retain_eng=True, retain_digit=True, use_ext
         elif (False == retain_eng) and (('\u0041' <= word <= '\u005a') or ('\u0061' <= word <= '\u007a')):
             word = '<ENG>'
         # 判断是否为OOV词
-        if word not in word2id_vocab:
+        if word in word2id_vocab:
             # 使用扩展词表
-            if use_extend_vocab is True:
+            if build_extend_vocab is True:
+                word_id_extend = word2id_vocab[word]
+            # 不使用扩展词表
+            word_id = word2id_vocab[word]
+        else:
+            # 使用扩展词表
+            if build_extend_vocab is True:
                 if word not in vocab_extend:
-                    vocab_extend.append(word)
-                word_id_extend = vocab_extend.index(word) + vocab_size
+                    vocab_extend[word] = len(vocab_extend)+vocab_size
+                word_id_extend = vocab_extend[word]
             # 不使用扩展词表
             word = '<UNK>'
             word_id = word2id_vocab[word]
-        else:
-            # 使用扩展词表
-            if use_extend_vocab is True:
-                word_id_extened = word2id_vocab[word]
-            # 不使用扩展词表
-            word_id = word2id_vocab[word]
         # 将得到的id添加到list
         # 使用扩展词表
-        if use_extend_vocab is True:
+        if build_extend_vocab is True:
             sentence_id.append(word_id)
             sentence_id_extended.append(word_id_extend)
-            return sentence_id, sentence_id_extended
         # 不使用扩展词表
         else:
             sentence_id.append(word_id)
-            return sentence_id
+     # 使用扩展词表
+    if build_extend_vocab is True:
+        if add_eos is True:
+            sentence_id.append(word2id_list_const['<EOS>'])
+            sentence_id_extended.append(word2id_list_const['<EOS>'])
+        return sentence_id, sentence_id_extended, vocab_extend
+    # 不使用扩展词表
+    else:
+        if add_eos is True:
+            sentence_id.append(word2id_list_const['<EOS>'])
+        return sentence_id
 
-#将一个句子补0至固定长度
+
+# 将一个句子补0至固定长度
 def pad_seq(seq, max_len, pad_mark=0):
     seq = seq[:max_len] + [pad_mark] * max(max_len - len(seq), 0)
     return seq
 
-def article2ids(article_words, vocab):
-  ids = []
-  oovs = []
-  unk_id = vocab.word2id(UNKNOWN_TOKEN)
-  for w in article_words:
-    i = vocab.word2id(w)
-    if i == unk_id: # If w is OOV
-      if w not in oovs: # Add to list of OOVs
-        oovs.append(w)
-      oov_num = oovs.index(w) # This is 0 for the first article OOV, 1 for the second article OOV...
-      ids.append(vocab.size() + oov_num) # This is e.g. 50000 for the first article OOV, 50001 for the second...
-    else:
-      ids.append(i)
-  return ids, oovs
 
-
-#将句子序列补0至固定长度
+# 将句子序列补0至固定长度
 def pad_sequences(sequences, max_seq_len, pad_mark=0):
     #sequences = [seq_1,seq_2,...,seq_n]
     #seq = [word_1,word_2,...,word_m]
@@ -161,6 +160,17 @@ def pad_sequences(sequences, max_seq_len, pad_mark=0):
         seq_list.append(seq_)
         seq_len_list.append(min(len(seq), max_len))
     return seq_list, seq_len_list
+
+
+# 提取变量名为字符串
+pattren = re.compile(r'[\W+\w+]*?get_variable_name\((\w+)\)')
+__get_variable_name__ = []
+def get_variable_name(x):
+    global __get_variable_name__
+    if not __get_variable_name__:
+        __get_variable_name__ = pattren.findall(traceback.extract_stack(limit=2)[0][3])
+    return __get_variable_name__.pop(0)
+
 
 
 if __name__=='__main__':
@@ -179,4 +189,9 @@ if __name__=='__main__':
             sent_, label_ = [], []
     word2id,vocab_size = build_word2id_vocab(data, r'..\\data\\ner\\word2id.pkl',retain_eng=False,retain_digit=False)
     print(vocab_size)
+
+
+
+
+
 

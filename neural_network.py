@@ -22,6 +22,8 @@ import nn_lib
 
 logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
+flag_seq2seq = True
+
 class NeuralNetwork(object):
     """none"""
     '''========================================================================='''
@@ -120,7 +122,8 @@ class NeuralNetwork(object):
     '''========================================================================='''
     # 训练
     def train(self, x=None, y=None, transfer_learning=False,
-              built_in_test=False, x_test=None, y_test=None, other_parameter=None):
+              built_in_test=False, x_test=None, y_test=None, other_parameter=None,
+              other_feed=None):
         # 读取样本特征值
         x, y = self.init_data(x, y)
         if x is None:
@@ -131,8 +134,8 @@ class NeuralNetwork(object):
         # 配置参数
         self.built_in_test = built_in_test
         if (other_parameter is not None) and (isinstance(other_parameter, dict)):
-            for key,value in other_parameter:
-                exec('self.{}={}'.format(key,value))
+            for key, value in other_parameter:
+                exec('self.{}={}'.format(key, value))
 
         # 重置tf张量空间
         tf.reset_default_graph()
@@ -141,7 +144,7 @@ class NeuralNetwork(object):
         self.model_out = self.creat_model()
         
         # 构建损失函数
-        loss = self.loss_fun(self.model_out)
+        loss = self.loss_fun(self.model_out, other_feed=other_feed)
         
         # 优化器
         optimize_step = self.optimizer(loss)
@@ -153,8 +156,18 @@ class NeuralNetwork(object):
         self.built_in_test_stop_flag = False
         if built_in_test is True:
             x_test, y_test = self.init_data(x_test, y_test)
-            feed_dict_test = self.get_feed_dict({self.x_ph: x_test, self.y_ph: y_test}, train_or_predict='predict')
-            built_in_test_cal = self.cal_score(y_true=self.y_ph, y_predict=self.model_out, score_type=self.eval_score_type)
+            if flag_seq2seq:
+                feed_dict = self.get_feed_dict({self.x_ph: x_test, self.y_ph: y_test,
+                                                self.x_extended_ph: other_feed['x_extended_test'],
+                                                self.y_extended_ph: other_feed['y_extended_test'],
+                                                self.vocab_size_extend_ph: other_feed['vocab_size_extend_infer']},
+                                               train_or_infer='train', other_feed=other_feed)
+                built_in_test_cal = self.cal_score(y_true=self.y_extended_ph, y_predict=self.model_out,
+                                                   score_type=self.eval_score_type)
+            else:
+                feed_dict_test = self.get_feed_dict({self.x_ph: x_test, self.y_ph: y_test},
+                                                    train_or_infer='train', other_feed=other_feed)
+                built_in_test_cal = self.cal_score(y_true=self.y_ph, y_predict=self.model_out, score_type=self.eval_score_type)
             self.built_in_test_stop_score_list = []
         
         # 初始化模型存取器
@@ -178,17 +191,38 @@ class NeuralNetwork(object):
                 self.step = 0
             # 外循环，所有样本循环若干次
             for i in range(self.epoch):
+                # todo shuffle
                 # 将数据随机打乱
                 # x = tf.random_shuffle(tf.concat((x, y), axis=1))
-                x = sklearn.utils.shuffle(np.concatenate((x, y), axis=1))
-                y = x[:, -self.dim_y:]
-                x = x[:, :-self.dim_y]
+                if flag_seq2seq:
+                    data_concat = sklearn.utils.shuffle(
+                        np.concatenate((x, y, other_feed['x_extended_train'], other_feed['y_extended_train'], other_feed['vocab_size_extend_train']), axis=1))
+                else:
+                    data_concat = sklearn.utils.shuffle(np.concatenate((x, y), axis=1))
+                # y = x[:, -self.dim_y:]
+                # x = x[:, :-self.dim_y]
                 # 内循环，每次选取批量的样本进行迭代
                 for step in range(len(x)//self.batch_size):
                     self.step = self.step+1
-                    batch_x = x[step*self.batch_size: (step+1)*self.batch_size]
-                    batch_y = y[step*self.batch_size: (step+1)*self.batch_size]
-                    feed_dict = self.get_feed_dict({self.x_ph: batch_x, self.y_ph: batch_y}, train_or_predict='train')
+                    data_batch = data_concat[step*self.batch_size: (step+1)*self.batch_size]
+                    if flag_seq2seq:
+                        x_batch = data_batch[:, 0:self.dim_x]
+                        y_batch = data_batch[:, self.dim_x:self.dim_x+self.dim_y]
+                        x_extend_batch = data_batch[:, self.dim_x+self.dim_y:self.dim_x*2+self.dim_y]
+                        y_extend_batch = data_batch[:, self.dim_x+self.dim_y:self.dim_x*2+self.dim_y]
+                        vocab_size_extend_batch = data_batch[:, -1:]
+                        feed_dict = self.get_feed_dict({self.x_ph: x_batch, self.y_ph: y_batch,
+                                                        self.x_extended_ph: x_extend_batch,
+                                                        self.y_extended_ph: y_extend_batch,
+                                                        self.vocab_size_extend_ph: vocab_size_extend_batch},
+                                                       train_or_infer='train', other_feed=other_feed)
+                    else:
+                        x_batch = data_batch[:, 0:self.dim_x]
+                        y_batch = data_batch[:, self.dim_x:self.dim_y]
+                        # batch_x = x[step*self.batch_size: (step+1)*self.batch_size]
+                        # batch_y = y[step*self.batch_size: (step+1)*self.batch_size]
+                        feed_dict = self.get_feed_dict({self.x_ph: x_batch, self.y_ph: y_batch},
+                                                       train_or_infer='train', other_feed=other_feed)
                     _, loss_value, score_value = sess.run([optimize_step, loss, score], feed_dict=feed_dict)
                     # 每次迭代输出一次评估得分
                     print('step', self.step, self.eval_score_type, score_value)
@@ -219,7 +253,7 @@ class NeuralNetwork(object):
     '''==============================predict part==============================='''
     '''========================================================================='''
     # 预测
-    def predict(self, x):
+    def predict(self, x, other_feed=None):
         # 规整特征数据
         x, _ = self.init_data(x=x)
         
@@ -238,7 +272,7 @@ class NeuralNetwork(object):
             # 读取模型参数
             saver.restore(sess, model_path)
             # 进行预测
-            feed_dict = self.get_feed_dict({self.x_ph: x}, train_or_predict='predict')
+            feed_dict = self.get_feed_dict({self.x_ph: x}, train_or_infer='infer', other_feed=other_feed)
             result = sess.run(model_out, feed_dict=feed_dict)
             if self.model_type == 'bilstm_crf':
                 logits = np.array(result)
@@ -267,35 +301,41 @@ class NeuralNetwork(object):
                 self.loss_fun_type = 'mse'
             elif self.task_type == 'classification':
                 self.loss_fun_type = 'cross_entropy'
+            elif self.task_type == 'seq_generation':
+                self.loss_fun_type = 'cross_entropy_seq2seq'
         else:
             self.loss_fun_type = loss_fun_type
         return self.loss_fun_type
 
     # 损失函数
-    def loss_fun(self, model_out):
+    def loss_fun(self, model_out, other_feed=None):
+        y_true = self.y_ph
         if self.loss_fun_type == 'mse':
-            loss = tf.reduce_mean(tf.square(tf.subtract(model_out, self.y_ph)))
+            loss = tf.reduce_mean(tf.square(tf.subtract(model_out, y_true)))
         elif self.loss_fun_type == 'mae':
-            loss = tf.reduce_mean(tf.abs(tf.subtract(model_out, self.y_ph)))
+            loss = tf.reduce_mean(tf.abs(tf.subtract(model_out, y_true)))
         elif self.loss_fun_type == 'cross_entropy':
-            loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=model_out, labels=self.y_ph))
+            loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=model_out, labels=y_true))
         elif self.loss_fun_type == 'cross_entropy_seq2seq':
+            y_true = other_feed['y_extended_infer']
             index_batch_num = tf.expand_dims(tf.range(model_out[0].shape[0].value), axis=1)
-            y_true_list = [tf.reshape(self.y_ph[:, step_num], [-1, 1]) for step_num in range(len(model_out))]
+            y_true_list = [tf.reshape(y_true[:, step_num], [-1, 1]) for step_num in range(len(model_out))]
             y_true_index = [tf.stack((index_batch_num, y_true_step), axis=2) for y_true_step in y_true_list]
             loss_raw = [tf.gather_nd(logit, index) for (logit, index) in zip(model_out, y_true_index)]
             loss = tf.reduce_mean(loss_raw)
+            # 全局变量，传递给score用
+            self.loss = loss
             # step_len_max = len(model_out)
             # batch_size = model_out[0].shape[0].value
             # vocab_size = model_out[0].shape[1].value
-            # y_true = [tf.reshape(tf.one_hot(indices=self.y_ph[:, step_num], depth= vocab_size), [batch_size, vocab_size])
+            # y_true = [tf.reshape(tf.one_hot(indices=y_true[:, step_num], depth= vocab_size), [batch_size, vocab_size])
             #           for step_num in range(step_len_max)]
             # loss_step = [tf.nn.softmax_cross_entropy_with_logits(logits=y_, labels=y) for y, y_ in zip(y_true, model_out)]
             # loss = tf.reduce_mean(loss_step)
         elif self.loss_fun_type == 'bilstm_crf':
             log_likelihood, self.transition_score_matrix =\
                 nn_lib.crf_log_likelihood(inputs=self.layer_output[-1],
-                                          tag_indices=self.y_ph,
+                                          tag_indices=y_true,
                                           sequence_lengths=self.seq_len,
                                           transition_params=self.transition_score_matrix)
             loss = -tf.reduce_mean(log_likelihood)
@@ -317,6 +357,8 @@ class NeuralNetwork(object):
             elif self.task_type == 'classification':
                 if self.dim_y == 2:
                     self.eval_score_type = 'f1_score'
+            elif self.task_type == 'seq_generation':
+                self.eval_score_type = 'cross_entropy_seq2seq'
         else:
             self.eval_score_type = eval_score_type
         self.built_in_test_rounds = hyper_parameter.get('built_in_test_rounds', 20)
@@ -386,6 +428,11 @@ class NeuralNetwork(object):
             elif score_type == 'mae':
                 return tf.reduce_mean(tf.abs(tf.subtract(y_true, y_predict)))
             elif score_type == 'bilstm_crf_loss':
+                # todo
+                # 全局变量self.loss会导致built_in_test和train的score想混淆？？？！！！
+                return self.loss
+            elif score_type == 'cross_entropy_seq2seq':
+                # todo
                 return self.loss
             else:
                 print('score_type error!')
@@ -508,6 +555,8 @@ class NeuralNetwork(object):
         
         # 配置批处理样本个数
         self.batch_size = model_parameter.get('batch_size', 1024)
+        # 确定模型当前处于训练模式还是预测模式
+        self.train_or_infer = model_parameter.get('train_or_infer', 'infer')
 
         # 根据模型类型，初始化模型参数
         if self.model_type == 'test':
@@ -540,13 +589,17 @@ class NeuralNetwork(object):
             self.layer_num = 1
         elif self.model_type == 'seq2seq':
             self.keep_prob = model_parameter.get('keep_prob', 1.0)
-            self.train_or_infer = model_parameter.get('train_or_infer', 'infer')
-            self.dim_rnn = model_parameter.get('dim_rnn', 300)
+            self.x_extended = model_parameter.get('x_id_extended', None)
+            self.y_extended = model_parameter.get('y_id_extended', None)
+            self.vocab_size_extend = model_parameter.get('vocab_size_extend', None)
             self.word_embd_dim = model_parameter.get('word_embd_dim', 300)
+            self.dim_rnn = model_parameter.get('dim_rnn', 300)
+            self.use_same_word_embd = model_parameter.get('use_same_word_embd', True)
             self.encoder_word_embd_pretrain = model_parameter.get('encoder_word_embd_pretrain', None)
             self.encoder_vocab_size = model_parameter.get('encoder_vocab_size', None)
             self.decoder_word_embd_pretrain = model_parameter.get('decoder_word_embd_pretrain', None)
             self.decoder_vocab_size = model_parameter.get('decoder_vocab_size', None)
+            self.target_seq_len_max = model_parameter.get('target_seq_len_max', 50)
         elif self.model_type == 'fm':
             # 确定隐层向量维度
             self.dim_lv = model_parameter.get('lantent_vector_dim', self.x.shape[1])
@@ -558,7 +611,7 @@ class NeuralNetwork(object):
     
     # 构建模型
     def creat_model(self):
-        self.predict_ph = tf.placeholder(tf.string, None, name='train_or_predict')
+        self.train_or_infer_ph = tf.placeholder(tf.string, name='train_or_infer')
         if self.model_type == 'mlp':
             self.x_ph = tf.placeholder('float32', [None, self.dim_x], name='x')
             self.y_ph = tf.placeholder('float32', [None, self.dim_y], name='y')
@@ -585,12 +638,17 @@ class NeuralNetwork(object):
             self.x_ph = tf.placeholder('int32', [None, self.dim_x], name='x')
             self.y_ph = tf.placeholder('int32', [None, self.dim_y], name='y')
             self.keep_prob_ph = tf.placeholder('float32', name='keep_prob')
-            self.train_or_infer_ph = tf.placeholder(tf.string, name='train_or_infer')
-            self.encoder, self.decoder = nn_model.seq2seq(self.x_ph, self.y_ph, self.keep_prob_ph, self.batch_size,
-                                                          self.train_or_infer, self.dim_rnn, self.word_embd_dim,
-                                                          self.encoder_word_embd_pretrain, self.encoder_vocab_size,
-                                                          self.decoder_word_embd_pretrain, self.decoder_vocab_size)
-            self.layer_output = self.decoder
+            self.x_extended_ph = tf.placeholder('int32', [None, self.dim_x], name='x_extended')
+            self.y_extended_ph = tf.placeholder('int32', [None, self.dim_x], name='y_extended')
+            self.vocab_size_extend_ph = tf.placeholder('int32', name='y_extended')
+            self.encoder, self.decoder = model_seq2seq.seq2seq(
+                self.x_ph, self.y_ph, self.keep_prob_ph, self.train_or_infer_ph,
+                self.x_extended_ph, self.y_extended_ph, self.vocab_size_extend_ph,
+                self.word_embd_dim, self.dim_rnn, self.use_same_word_embd,
+                self.encoder_word_embd_pretrain, self.encoder_vocab_size,
+                self.decoder_word_embd_pretrain, self.decoder_vocab_size,
+                self.target_seq_len_max)
+            self.layer_output = self.encoder + self.decoder
         elif self.model_type == 'fm':
             self.x_ph = tf.placeholder('float32', [None, self.dim_x], name='x')
             self.y_ph = tf.placeholder('float32', [None, self.dim_y], name='y')
@@ -602,18 +660,21 @@ class NeuralNetwork(object):
         return self.layer_output[-1]
 
     # 获取feed参数
-    def get_feed_dict(self, feed_dict_init, train_or_predict):
+    def get_feed_dict(self, feed_dict_init, train_or_infer, other_feed=None):
         feed_dict = feed_dict_init
-        # 标记当前模型是训练模式还是预测模式
-        if 'predict' == train_or_predict:
-            feed_dict[self.predict_ph] = 'predict'
+        # 1.标记当前模型是训练模式还是预测模式
+        # 2.配置keep_prob
+        if 'train' == train_or_infer:
+            feed_dict[self.train_or_infer_ph] = 'train'
+            feed_dict[self.keep_prob_ph] = self.keep_prob
         else:
-            feed_dict[self.predict_ph] = 'train'
-            # 根据模型是否有dropout层，以及模型用于预测还是训练，选择传入的keep_prob参数
+            feed_dict[self.train_or_infer_ph] = 'infer'
+            feed_dict[self.keep_prob_ph] = 1.0
+        # 根据模型是否有dropout层，以及模型用于预测还是训练，选择传入的keep_prob参数
         if self.model_type == 'test':
             pass
         elif self.model_type == 'mlp':
-            if 'predict' == train_or_predict:
+            if 'infer' == train_or_infer:
                 feed_dict[self.keep_prob_ph] = [1.0] * self.layer_num
             else:
                 if len(self.keep_prob) == 1:
@@ -621,22 +682,18 @@ class NeuralNetwork(object):
                 else:
                     feed_dict[self.keep_prob_ph] = self.keep_prob[:-1] + [1.0]
         elif self.model_type == 'rnn_nlp':
-            if 'predict' == train_or_predict:
-                feed_dict[self.keep_prob_ph] = 1.0
-            else:
-                feed_dict[self.keep_prob_ph] = self.keep_prob
+            pass
         elif self.model_type == 'seq2seq':
-            if 'predict' == train_or_predict:
-                feed_dict[self.keep_prob_ph] = 1.0
-                feed_dict[self.train_or_infer_ph] = 'infer'
+            if 'infer' == train_or_infer:
+                feed_dict[self.x_extended_ph] = other_feed['x_extended_infer']
+                feed_dict[self.vocab_size_extend_ph] = other_feed['vocab_size_extend_infer']
             else:
-                feed_dict[self.keep_prob_ph] = self.keep_prob
-                feed_dict[self.train_or_infer_ph] = 'train'
+                pass
+                # feed_dict[self.x_extended_ph] = other_feed.get('x_extended_train', self.x_extended)
+                # feed_dict[self.y_extended_ph] = other_feed.get('y_extended_train', self.y_extended)
+                # feed_dict[self.vocab_size_extend_ph] = other_feed.get('vocab_size_extend_train', self.vocab_size_extend)
         elif self.model_type == 'bilstm_crf':
-            if 'predict' == train_or_predict:
-                feed_dict[self.keep_prob_ph] = 1.0
-            else:
-                feed_dict[self.keep_prob_ph] = self.keep_prob
+            pass
         return feed_dict
 
     '''========================================================================'''
@@ -707,5 +764,6 @@ def demo_regression():
 if __name__ == '__main__':
     # model, x, y, out = demo_regression()
     logging.warning('end')
+
 
 
