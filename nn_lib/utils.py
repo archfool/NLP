@@ -92,11 +92,17 @@ def read_word2id_dict(path):
 
 
 # 将句子转化为ID序列
-def sentence2id(sent, word2id_vocab, add_eos=True, retain_eng=True, retain_digit=True, build_extend_vocab=False):
+def sentence2id(sent, word2id_vocab, add_eos=True, add_sos=False, retain_eng=True, retain_digit=True, build_extend_vocab=False):
     sent = list(sent)
-    sentence_id = []
+    if add_sos is True:
+        sentence_id = [word2id_list_const['<SOS>']]
+    else:
+        sentence_id = []
     vocab_extend = {}
-    sentence_id_extended = []
+    if add_sos is True:
+        sentence_id_extended = [word2id_list_const['<SOS>']]
+    else:
+        sentence_id_extended = []
     vocab_size = len(word2id_vocab)
     for word in sent:
         # 判断是否转换数字和英文字母
@@ -157,6 +163,7 @@ def pad_sequences(sequences, max_seq_len, pad_mark=0):
     for seq in sequences:
         seq = list(seq)
         seq_ = seq[:max_len] + [pad_mark] * max(max_len - len(seq), 0)
+        seq_[-1] = word2id_list_const['<EOS>'] if seq_[-1] != 0 else 0
         seq_list.append(seq_)
         seq_len_list.append(min(len(seq), max_len))
     return seq_list, seq_len_list

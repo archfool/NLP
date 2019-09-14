@@ -35,7 +35,7 @@ label2id = {"O": 0,
              "B-LOC": 3, "I-LOC": 4,
              "B-ORG": 5, "I-ORG": 6
              }
-id2label = {id:label for label,id in label2id.items()}
+id2label = {id: label for label, id in label2id.items()}
 
 #读取用于训练的语料库
 def read_ner_corpus(corpus_path):
@@ -91,7 +91,7 @@ def ner_predict(model, x, word2id, label2id, max_len=None, do_word2id=True):
         for row in x:
             word_list.append(series(row).map(id2word).tolist())
     #预测标签
-    label_id_list = model.predict(seqs)
+    label_id_list = model.infer(seqs)
     label_list = []
     for row in label_id_list:
         label_list.append(series(row).map(id2label).tolist())

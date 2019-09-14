@@ -116,7 +116,7 @@ model = neural_network(x_train,y_train,task_type='regression',\
                                         'model_save_epoch':100},\
                        path_data=path_data)
 #model.train(transfer_learning=True,built_in_test=True,x_test=x_test,y_test=y_test)
-y_test_ = model.predict(x_test)
+y_test_ = model.infer(x_test)
 #cmp = np.concatenate((np.array(y_test).reshape((-1,1)),np.array(y_test_)),axis=1)
 #导出模型参数
 #model.params_output()    

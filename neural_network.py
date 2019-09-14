@@ -18,6 +18,10 @@ import nn_model
 import model_seq2seq
 from sklearn.preprocessing import StandardScaler
 import logging
+from tensorflow.python.ops import variable_scope
+from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import nn_ops
+from tensorflow.python.ops import math_ops
 import nn_lib
 
 logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
@@ -116,6 +120,7 @@ class NeuralNetwork(object):
         self.model_save_rounds = other_parameter.get('model_save_rounds', 100)
         # 配置训练的epoch数
         self.epoch = other_parameter.get('epoch', 10000)
+        return True
 
     '''========================================================================='''
     '''===============================train part================================'''
@@ -158,8 +163,9 @@ class NeuralNetwork(object):
             x_test, y_test = self.init_data(x_test, y_test)
             if flag_seq2seq:
                 feed_dict = self.get_feed_dict({self.x_ph: x_test, self.y_ph: y_test,
-                                                self.x_extended_ph: other_feed['x_extended_test'],
-                                                self.y_extended_ph: other_feed['y_extended_test'],
+                                                self.x_extended_ph: other_feed['x_extended_infer'],
+                                                self.y_extended_ph: other_feed['y_extended_infer'],
+                                                self.batch_size_ph: x_test.shape[0],
                                                 self.vocab_size_extend_ph: other_feed['vocab_size_extend_infer']},
                                                train_or_infer='train', other_feed=other_feed)
                 built_in_test_cal = self.cal_score(y_true=self.y_extended_ph, y_predict=self.model_out,
@@ -196,7 +202,7 @@ class NeuralNetwork(object):
                 # x = tf.random_shuffle(tf.concat((x, y), axis=1))
                 if flag_seq2seq:
                     data_concat = sklearn.utils.shuffle(
-                        np.concatenate((x, y, other_feed['x_extended_train'], other_feed['y_extended_train'], other_feed['vocab_size_extend_train']), axis=1))
+                        np.concatenate((x, y, other_feed['x_extended_train'], other_feed['y_extended_train']), axis=1))
                 else:
                     data_concat = sklearn.utils.shuffle(np.concatenate((x, y), axis=1))
                 # y = x[:, -self.dim_y:]
@@ -210,11 +216,13 @@ class NeuralNetwork(object):
                         y_batch = data_batch[:, self.dim_x:self.dim_x+self.dim_y]
                         x_extend_batch = data_batch[:, self.dim_x+self.dim_y:self.dim_x*2+self.dim_y]
                         y_extend_batch = data_batch[:, self.dim_x+self.dim_y:self.dim_x*2+self.dim_y]
-                        vocab_size_extend_batch = data_batch[:, -1:]
+                        # todo to delete
+                        # vocab_size_extend_batch = data_batch[:, -1:]
                         feed_dict = self.get_feed_dict({self.x_ph: x_batch, self.y_ph: y_batch,
                                                         self.x_extended_ph: x_extend_batch,
                                                         self.y_extended_ph: y_extend_batch,
-                                                        self.vocab_size_extend_ph: vocab_size_extend_batch},
+                                                        self.batch_size_ph: x_batch.shape[0],
+                                                        self.vocab_size_extend_ph: other_feed['vocab_size_extend_train']},
                                                        train_or_infer='train', other_feed=other_feed)
                     else:
                         x_batch = data_batch[:, 0:self.dim_x]
@@ -253,7 +261,7 @@ class NeuralNetwork(object):
     '''==============================predict part==============================='''
     '''========================================================================='''
     # 预测
-    def predict(self, x, other_feed=None):
+    def infer(self, x, other_feed=None):
         # 规整特征数据
         x, _ = self.init_data(x=x)
         
@@ -318,11 +326,18 @@ class NeuralNetwork(object):
             loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=model_out, labels=y_true))
         elif self.loss_fun_type == 'cross_entropy_seq2seq':
             y_true = other_feed['y_extended_infer']
-            index_batch_num = tf.expand_dims(tf.range(model_out[0].shape[0].value), axis=1)
-            y_true_list = [tf.reshape(y_true[:, step_num], [-1, 1]) for step_num in range(len(model_out))]
+            y_true_seq_len = tf.cast(tf.reduce_sum(tf.sign(y_true), axis=1), tf.int32)
+            # todo to delete
+            # index_batch_num = tf.expand_dims(tf.range(model_out[0].shape[0].value), axis=1)
+            index_batch_num = tf.expand_dims(tf.range(self.batch_size_ph), axis=1)
+            y_true_list = [tf.reshape(y_true[:, step_num], [-1, 1]) for step_num in range(y_true.shape[1])]
             y_true_index = [tf.stack((index_batch_num, y_true_step), axis=2) for y_true_step in y_true_list]
             loss_raw = [tf.gather_nd(logit, index) for (logit, index) in zip(model_out, y_true_index)]
-            loss = tf.reduce_mean(loss_raw)
+
+            y_seq_mask = tf.cast(array_ops.sequence_mask(y_true_seq_len, self.target_seq_len_max), tf.float32)
+            loss_masked = tf.concat(loss_raw, axis=1) * y_seq_mask
+            loss = -tf.reduce_sum(loss_masked)/tf.reduce_sum(y_seq_mask)
+            # loss = -tf.reduce_mean(loss_raw)
             # 全局变量，传递给score用
             self.loss = loss
             # step_len_max = len(model_out)
@@ -361,7 +376,7 @@ class NeuralNetwork(object):
                 self.eval_score_type = 'cross_entropy_seq2seq'
         else:
             self.eval_score_type = eval_score_type
-        self.built_in_test_rounds = hyper_parameter.get('built_in_test_rounds', 20)
+        self.built_in_test_rounds = hyper_parameter.get('built_in_test_rounds', 30)
         self.early_stop_rounds = hyper_parameter.get('early_stop_rounds', None)
         self.early_stop_score_list = []
         self.early_stop_flag = False
@@ -638,11 +653,12 @@ class NeuralNetwork(object):
             self.x_ph = tf.placeholder('int32', [None, self.dim_x], name='x')
             self.y_ph = tf.placeholder('int32', [None, self.dim_y], name='y')
             self.keep_prob_ph = tf.placeholder('float32', name='keep_prob')
+            self.batch_size_ph = tf.placeholder('int32', name='batch_size')
             self.x_extended_ph = tf.placeholder('int32', [None, self.dim_x], name='x_extended')
             self.y_extended_ph = tf.placeholder('int32', [None, self.dim_x], name='y_extended')
             self.vocab_size_extend_ph = tf.placeholder('int32', name='y_extended')
             self.encoder, self.decoder = model_seq2seq.seq2seq(
-                self.x_ph, self.y_ph, self.keep_prob_ph, self.train_or_infer_ph,
+                self.x_ph, self.y_ph, self.keep_prob_ph, self.train_or_infer_ph, self.batch_size_ph,
                 self.x_extended_ph, self.y_extended_ph, self.vocab_size_extend_ph,
                 self.word_embd_dim, self.dim_rnn, self.use_same_word_embd,
                 self.encoder_word_embd_pretrain, self.encoder_vocab_size,
@@ -684,6 +700,7 @@ class NeuralNetwork(object):
         elif self.model_type == 'rnn_nlp':
             pass
         elif self.model_type == 'seq2seq':
+            # todo add batch_size
             if 'infer' == train_or_infer:
                 feed_dict[self.x_extended_ph] = other_feed['x_extended_infer']
                 feed_dict[self.vocab_size_extend_ph] = other_feed['vocab_size_extend_infer']
@@ -743,7 +760,7 @@ def demo_regression():
         optimizer_type='Adam', hyper_parameter={'batch_size': 1024, 'learning_rate': 0.01},
         path_data='')
     model.train(epoch=1000)
-    out = model.predict(x)
+    out = model.infer(x)
     
     if False:
         for var in tf.global_variables():
