@@ -97,9 +97,6 @@ def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
             vocab_distributions = [tf.nn.softmax(score) for score in vocab_scores]
             # vocab_dist_extendeds: list [batch_size, decoder_vocab_size+vocab_size_extend] by length decoder_step_len
             vocab_dist_extendeds = [tf.pad(vocab_dist, paddings=[[0, 0], [0, vocab_size_extend]]) for vocab_dist in vocab_distributions]
-            # todo to delete
-            # extend_zeros = tf.zeros((batch_size, vocab_size_extend))
-            # vocab_dist_extendeds= [tf.concat([vocab_dist, extend_zeros], axis=1) for vocab_dist in vocab_distributions]
 
         with tf.variable_scope('Pointer_Network') as scope_Pointer_Network:
             index_batch_num = tf.range(batch_size)
@@ -227,9 +224,11 @@ def dynamic_decoder(cell, memory, memory_sequence_length, init_state, train_or_i
             if step_num != decoder_seq_len_max-1:
                 cell_input = target_seq_embd[:, step_num+1, :]
         elif 'infer' == train_or_infer:
-            cell_input = context
+            cell_input = output
+            # cell_input = context
         else:
-            cell_input = context
+            if step_num != decoder_seq_len_max-1:
+                cell_input = target_seq_embd[:, step_num+1, :]
             # print('param train_or_infer uninitialled !!!')
     return outputs, aligns, p_gens, cell_state
 

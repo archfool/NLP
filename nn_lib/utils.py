@@ -45,8 +45,7 @@ def str_segment(sentence, pos=False):
 
 # 建立带有词频的词表
 def build_word2id_vocab(data, saved_path, vocab_size=None, use_seg=False,
-                        language='chs', retain_eng=True, retain_digit=True,
-                        build_extend_vocab=False, extend_vocab_max_size=0):
+                        language='chs', retain_eng=True, retain_digit=True):
     #若词表数量参数为空，则根据语言类型，配置缺省值
     if None==vocab_size:
         if 'chs'==language:

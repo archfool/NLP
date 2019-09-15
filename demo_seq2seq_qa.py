@@ -36,7 +36,7 @@ flag_process_data = False
 word_embd_dim = 100
 dim_rnn = word_embd_dim
 learning_rate = 1e-3
-batch_size = 1024
+batch_size = 512
 max_seq_len = 30
 keep_prob = 0.95
 
@@ -149,13 +149,12 @@ if __name__ == "__main__":
     if flag_process_data is True:
         preprocess_data(vocab_size)
     corpus = load_processed_corpus()
-    model = NeuralNetwork(data_x=corpus['x_train'], data_y=corpus['y_train'], task_type='seq_generation',
+    data = [corpus['x_train'], corpus['x_extended_train'], corpus['vocab_extend_train'], corpus['y_train'], corpus['y_extended_train']]
+    data_test = [corpus['x_test'], corpus['x_extended_test'], corpus['vocab_extend_test'], corpus['y_test'], corpus['y_extended_test']]
+    model = NeuralNetwork(data=data, task_type='seq_generation',
                           model_type='seq2seq', loss_fun_type='cross_entropy_seq2seq',
                           eval_score_type='cross_entropy_seq2seq', optimizer_type='Adam',
                           model_parameter={'keep_prob': keep_prob,
-                                           'x_id_extended': corpus['x_extended_train'],
-                                           'y_id_extended': corpus['y_extended_train'],
-                                           'vocab_size_extend': max([len(vocab) for vocab in corpus['vocab_extend_train']]),
                                            'word_embd_dim': word_embd_dim,
                                            'dim_rnn': dim_rnn,
                                            'use_same_word_embd': True,
@@ -164,25 +163,14 @@ if __name__ == "__main__":
                                            'target_seq_len_max': max_seq_len,
                                            'batch_size': batch_size},
                           hyper_parameter={'learning_rate': learning_rate,
-                                           'built_in_test_rounds': 2,
+                                           'built_in_test_rounds': 3,
                                            'early_stop_rounds': 150},
                           other_parameter={'model_save_rounds': 20,
                                            'path_data': path_seq2seq}
                           )
     # 训练
     if True:
-        # todo infer模式下，tgt_seq也要输入sos
-        other_feed = {
-            'x_extended_train': corpus['x_extended_train'],
-            'y_extended_train': corpus['y_extended_train'],
-            'vocab_size_extend_train': max([len(vocab[0]) for vocab in corpus['vocab_extend_train']]),
-            'x_extended_infer': corpus['x_extended_test'],
-            'y_extended_infer': corpus['y_extended_test'],
-            'vocab_size_extend_infer': max([len(vocab[0]) for vocab in corpus['vocab_extend_test']]),
-        }
-        model.train(transfer_learning=False, built_in_test=False,
-                    x_test=corpus['x_test'], y_test=corpus['x_test'],
-                    other_feed=other_feed)
+        model.train(transfer_learning=True, built_in_test=True, data_test=data_test)
 
     print('Task End.')
 

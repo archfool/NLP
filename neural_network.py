@@ -33,12 +33,12 @@ class NeuralNetwork(object):
     '''========================================================================='''
     '''===============================init part================================='''
     '''========================================================================='''
-    def __init__(self, data_x, data_y, task_type=None,
+    def __init__(self, data, task_type=None,
                  model_type=None, model_parameter=None, hyper_parameter=None,
                  loss_fun_type=None, optimizer_type='Adam', eval_score_type=None,
                  other_parameter=None):
         # 规整样本特征值x和预测值y
-        self.init_data(data_x, data_y)
+        self.data = self.init_data(data)
         # 配置任务类型：回归，分类,文本生成，等
         if self.init_task_type(task_type) is None:
             return
@@ -57,46 +57,44 @@ class NeuralNetwork(object):
             return
 
     # 读取并规整样本数据
-    def init_data(self, x=None, y=None):
-        # 读取x
-        if isinstance(x, (list, tuple, np.ndarray, pd.Series, pd.DataFrame)):
-            x = np.array(x)
-            if x.any() is False:
-                print('input data x is empty!')
-                return None
+    def init_data(self, data):
+        if data is None:
+            return None
+
+        # 如果data不是一个列表（即为单个数据），将它放入列表里
+        if not isinstance(data, list):
+            data = [data]
+
+        # 若数据维度列表还未被初始化（即第一次初始化数据），则构建空列表
+        try:
+            self.data_dim[0]
+        except:
+            self.data_dim = []
+
+        # 遍历data列表，处理数据
+        data_processed = []
+        for i, d in enumerate(data):
+            if isinstance(d, (list, tuple, np.ndarray, pd.Series, pd.DataFrame)):
+                d = np.array(d)
+                if d.any() is False:
+                    print('input data_{} is empty!'.format(i))
+                    return None
+                else:
+                    # 如果实现初始化过data_dim，则通过data_dim来reshape，否则初始化data_dim
+                    try:
+                        d = d.reshape([-1, self.data_dim[i]])
+                        data_processed.append(d)
+                    except:
+                        if len(d.shape) == 1:
+                            d = d.reshape([-1, 1])
+                            print('input data_{} has only one sample, change it automatically!'.format(i))
+                        data_processed.append(d)
+                        self.data_dim.append(d.shape[1])
             else:
-                try:
-                    x = x.reshape([-1, self.dim_x])
-                    self.x = x
-                # 在self.dim_x还未定义时，初始化self.dim_x
-                except:
-                    if len(x.shape) == 1:
-                        x = x.reshape([-1, 1])
-                        print('input data_x has only one sample, change it automatically!')
-                    self.x = x
-                    self.dim_x = self.x.shape[1]
-        else:
-            x = None
-        # 读取y
-        if isinstance(y, (list, tuple, np.ndarray, pd.Series, pd.DataFrame)):
-            y = np.array(y)
-            if not y.any():
-                print('input data y is empty!')
-                return None
-            else:
-                try:
-                    y = y.reshape([-1, self.dim_y])
-                    self.y = y
-                # 在self.dim_y还未定义时，初始化self.dim_y
-                except:
-                    y = y.reshape([self.x.shape[0], -1])
-                    self.y = y
-                    self.dim_y = self.y.shape[1]
-        else:
-            y = None
-        # 返回规整好的样本数据
-        return x, y
-    
+                data_processed.append(None)
+        return data_processed
+
+
     # 配置任务的类型：回归，二分类、多分类等等
     def init_task_type(self, task_type):
         if task_type in ['regression',
@@ -126,16 +124,15 @@ class NeuralNetwork(object):
     '''===============================train part================================'''
     '''========================================================================='''
     # 训练
-    def train(self, x=None, y=None, transfer_learning=False,
-              built_in_test=False, x_test=None, y_test=None, other_parameter=None,
-              other_feed=None):
+    def train(self, data=None, transfer_learning=False,
+              built_in_test=False, data_test=None,
+              other_parameter=None):
         # 读取样本特征值
-        x, y = self.init_data(x, y)
-        if x is None:
-            x = self.x
-        if y is None:
-            y = self.y
-        
+        data = self.init_data(data)
+        if data is None:
+            data = self.data
+        batch_sum = data[0].shape[0]
+
         # 配置参数
         self.built_in_test = built_in_test
         if (other_parameter is not None) and (isinstance(other_parameter, dict)):
@@ -149,33 +146,22 @@ class NeuralNetwork(object):
         self.model_out = self.creat_model()
         
         # 构建损失函数
-        loss = self.loss_fun(self.model_out, other_feed=other_feed)
+        loss = self.loss_fun(self.model_out)
         
         # 优化器
         optimize_step = self.optimizer(loss)
         
         # 评估函数
         score = self.cal_score(y_true=self.y_ph, y_predict=self.model_out, score_type=self.eval_score_type)
-        
+
         # 初始化内置验证集评估模块
         self.built_in_test_stop_flag = False
         if built_in_test is True:
-            x_test, y_test = self.init_data(x_test, y_test)
-            if flag_seq2seq:
-                feed_dict = self.get_feed_dict({self.x_ph: x_test, self.y_ph: y_test,
-                                                self.x_extended_ph: other_feed['x_extended_infer'],
-                                                self.y_extended_ph: other_feed['y_extended_infer'],
-                                                self.batch_size_ph: x_test.shape[0],
-                                                self.vocab_size_extend_ph: other_feed['vocab_size_extend_infer']},
-                                               train_or_infer='train', other_feed=other_feed)
-                built_in_test_cal = self.cal_score(y_true=self.y_extended_ph, y_predict=self.model_out,
-                                                   score_type=self.eval_score_type)
-            else:
-                feed_dict_test = self.get_feed_dict({self.x_ph: x_test, self.y_ph: y_test},
-                                                    train_or_infer='train', other_feed=other_feed)
-                built_in_test_cal = self.cal_score(y_true=self.y_ph, y_predict=self.model_out, score_type=self.eval_score_type)
+            data_test = self.init_data(data_test)
+            feed_dict_test = self.get_feed_dict(data=data_test, train_or_infer='infer')
+            built_in_test_cal = self.cal_score(y_true=self.y_ph, y_predict=self.model_out, score_type=self.eval_score_type)
             self.built_in_test_stop_score_list = []
-        
+
         # 初始化模型存取器
         saver = tf.train.Saver(max_to_keep=10)
         if not os.path.exists(self.path_data+'model_save\\'):
@@ -200,40 +186,17 @@ class NeuralNetwork(object):
                 # todo shuffle
                 # 将数据随机打乱
                 # x = tf.random_shuffle(tf.concat((x, y), axis=1))
-                if flag_seq2seq:
-                    data_concat = sklearn.utils.shuffle(
-                        np.concatenate((x, y, other_feed['x_extended_train'], other_feed['y_extended_train']), axis=1))
-                else:
-                    data_concat = sklearn.utils.shuffle(np.concatenate((x, y), axis=1))
-                # y = x[:, -self.dim_y:]
-                # x = x[:, :-self.dim_y]
+                data_concat = sklearn.utils.shuffle(np.concatenate(data, axis=1))
                 # 内循环，每次选取批量的样本进行迭代
-                for step in range(len(x)//self.batch_size):
+                for step in range(batch_sum//self.batch_size):
                     self.step = self.step+1
-                    data_batch = data_concat[step*self.batch_size: (step+1)*self.batch_size]
-                    if flag_seq2seq:
-                        x_batch = data_batch[:, 0:self.dim_x]
-                        y_batch = data_batch[:, self.dim_x:self.dim_x+self.dim_y]
-                        x_extend_batch = data_batch[:, self.dim_x+self.dim_y:self.dim_x*2+self.dim_y]
-                        y_extend_batch = data_batch[:, self.dim_x+self.dim_y:self.dim_x*2+self.dim_y]
-                        # todo to delete
-                        # vocab_size_extend_batch = data_batch[:, -1:]
-                        feed_dict = self.get_feed_dict({self.x_ph: x_batch, self.y_ph: y_batch,
-                                                        self.x_extended_ph: x_extend_batch,
-                                                        self.y_extended_ph: y_extend_batch,
-                                                        self.batch_size_ph: x_batch.shape[0],
-                                                        self.vocab_size_extend_ph: other_feed['vocab_size_extend_train']},
-                                                       train_or_infer='train', other_feed=other_feed)
-                    else:
-                        x_batch = data_batch[:, 0:self.dim_x]
-                        y_batch = data_batch[:, self.dim_x:self.dim_y]
-                        # batch_x = x[step*self.batch_size: (step+1)*self.batch_size]
-                        # batch_y = y[step*self.batch_size: (step+1)*self.batch_size]
-                        feed_dict = self.get_feed_dict({self.x_ph: x_batch, self.y_ph: y_batch},
-                                                       train_or_infer='train', other_feed=other_feed)
-                    _, loss_value, score_value = sess.run([optimize_step, loss, score], feed_dict=feed_dict)
+                    data_batch_concat = data_concat[step*self.batch_size: (step+1)*self.batch_size]
+                    data_batch = [data_batch_concat[:, sum(self.data_dim[:i]):sum(self.data_dim[:i+1])] for i in range(len(self.data_dim))]
+                    feed_dict = self.get_feed_dict(data=data_batch, train_or_infer='train')
+                    output_logits, _, loss_value, score_value = sess.run([self.model_out, optimize_step, loss, score], feed_dict=feed_dict)
                     # 每次迭代输出一次评估得分
                     print('step', self.step, self.eval_score_type, score_value)
+                    tmp = np.concatenate([np.reshape(np.argmax(logit, axis=1), [-1,1]) for logit in output_logits], axis=1)
                     # early_stop判断
                     self.early_stop_judge(score_value)
                     if self.early_stop_flag:
@@ -316,7 +279,7 @@ class NeuralNetwork(object):
         return self.loss_fun_type
 
     # 损失函数
-    def loss_fun(self, model_out, other_feed=None):
+    def loss_fun(self, model_out):
         y_true = self.y_ph
         if self.loss_fun_type == 'mse':
             loss = tf.reduce_mean(tf.square(tf.subtract(model_out, y_true)))
@@ -325,28 +288,17 @@ class NeuralNetwork(object):
         elif self.loss_fun_type == 'cross_entropy':
             loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=model_out, labels=y_true))
         elif self.loss_fun_type == 'cross_entropy_seq2seq':
-            y_true = other_feed['y_extended_infer']
+            y_true = self.y_extended_ph
             y_true_seq_len = tf.cast(tf.reduce_sum(tf.sign(y_true), axis=1), tf.int32)
-            # todo to delete
-            # index_batch_num = tf.expand_dims(tf.range(model_out[0].shape[0].value), axis=1)
             index_batch_num = tf.expand_dims(tf.range(self.batch_size_ph), axis=1)
             y_true_list = [tf.reshape(y_true[:, step_num], [-1, 1]) for step_num in range(y_true.shape[1])]
             y_true_index = [tf.stack((index_batch_num, y_true_step), axis=2) for y_true_step in y_true_list]
             loss_raw = [tf.gather_nd(logit, index) for (logit, index) in zip(model_out, y_true_index)]
-
             y_seq_mask = tf.cast(array_ops.sequence_mask(y_true_seq_len, self.target_seq_len_max), tf.float32)
             loss_masked = tf.concat(loss_raw, axis=1) * y_seq_mask
             loss = -tf.reduce_sum(loss_masked)/tf.reduce_sum(y_seq_mask)
-            # loss = -tf.reduce_mean(loss_raw)
             # 全局变量，传递给score用
             self.loss = loss
-            # step_len_max = len(model_out)
-            # batch_size = model_out[0].shape[0].value
-            # vocab_size = model_out[0].shape[1].value
-            # y_true = [tf.reshape(tf.one_hot(indices=y_true[:, step_num], depth= vocab_size), [batch_size, vocab_size])
-            #           for step_num in range(step_len_max)]
-            # loss_step = [tf.nn.softmax_cross_entropy_with_logits(logits=y_, labels=y) for y, y_ in zip(y_true, model_out)]
-            # loss = tf.reduce_mean(loss_step)
         elif self.loss_fun_type == 'bilstm_crf':
             log_likelihood, self.transition_score_matrix =\
                 nn_lib.crf_log_likelihood(inputs=self.layer_output[-1],
@@ -370,7 +322,7 @@ class NeuralNetwork(object):
             if self.task_type == 'regression':
                 self.eval_score_type = 'mse'
             elif self.task_type == 'classification':
-                if self.dim_y == 2:
+                if self.data_dim[1] == 2:
                     self.eval_score_type = 'f1_score'
             elif self.task_type == 'seq_generation':
                 self.eval_score_type = 'cross_entropy_seq2seq'
@@ -460,7 +412,7 @@ class NeuralNetwork(object):
             self.early_stop_flag = False
             return
         # 判断评估函数值是大点好，还是小点好
-        if self.eval_score_type in ['mse', 'mae', 'bilstm_crf_loss']:
+        if self.eval_score_type in ['mse', 'mae', 'bilstm_crf_loss', 'cross_entropy_seq2seq']:
             minimize = True
         elif self.eval_score_type in ['f1_score', 'precision', 'recall', 'accuracy']:
             minimize = False
@@ -493,7 +445,7 @@ class NeuralNetwork(object):
         if self.early_stop_rounds is None:
             return
         # 判断评估函数值是大点好，还是小点好
-        if self.eval_score_type in ['mse', 'mae', 'bilstm_crf_loss']:
+        if self.eval_score_type in ['mse', 'mae', 'bilstm_crf_loss', 'cross_entropy_seq2seq']:
             minimize = True
         elif self.eval_score_type in ['f1_score', 'precision', 'recall', 'accuracy']:
             minimize = False
@@ -580,7 +532,7 @@ class NeuralNetwork(object):
             # 获取keep_prob参数
             self.keep_prob = list(model_parameter.get('keep_prob', [1.0]))
             # 获取每层网络的神经元个数
-            self.dim = [self.dim_x]+list(model_parameter.get('dim', []))+[self.dim_y]
+            self.dim = [self.data_dim[0]]+list(model_parameter.get('dim', []))+[self.data_dim[1]]
             # 获取神经网络层数
             self.layer_num = len(self.dim)-1
             # 获取激活函数
@@ -604,9 +556,9 @@ class NeuralNetwork(object):
             self.layer_num = 1
         elif self.model_type == 'seq2seq':
             self.keep_prob = model_parameter.get('keep_prob', 1.0)
-            self.x_extended = model_parameter.get('x_id_extended', None)
-            self.y_extended = model_parameter.get('y_id_extended', None)
-            self.vocab_size_extend = model_parameter.get('vocab_size_extend', None)
+            # self.x_extended = model_parameter.get('x_id_extended', None)
+            # self.y_extended = model_parameter.get('y_id_extended', None)
+            # self.vocab_size_extend = model_parameter.get('vocab_size_extend', None)
             self.word_embd_dim = model_parameter.get('word_embd_dim', 300)
             self.dim_rnn = model_parameter.get('dim_rnn', 300)
             self.use_same_word_embd = model_parameter.get('use_same_word_embd', True)
@@ -617,7 +569,7 @@ class NeuralNetwork(object):
             self.target_seq_len_max = model_parameter.get('target_seq_len_max', 50)
         elif self.model_type == 'fm':
             # 确定隐层向量维度
-            self.dim_lv = model_parameter.get('lantent_vector_dim', self.x.shape[1])
+            self.dim_lv = model_parameter.get('lantent_vector_dim', self.data[0].shape[1])
         else:
             print('model_type error!')
             return
@@ -628,20 +580,20 @@ class NeuralNetwork(object):
     def creat_model(self):
         self.train_or_infer_ph = tf.placeholder(tf.string, name='train_or_infer')
         if self.model_type == 'mlp':
-            self.x_ph = tf.placeholder('float32', [None, self.dim_x], name='x')
-            self.y_ph = tf.placeholder('float32', [None, self.dim_y], name='y')
+            self.x_ph = tf.placeholder('float32', [None, self.data_dim[0]], name='x')
+            self.y_ph = tf.placeholder('float32', [None, self.data_dim[1]], name='y')
             self.keep_prob_ph = tf.placeholder('float32', [self.layer_num], name='keep_prob')
             self.layer_output = nn_model.mlp(self.x_ph, self.keep_prob_ph,
                                              self.activation_fun, self.layer_num, self.dim)
         elif self.model_type == 'rnn_nlp':
-            self.x_ph = tf.placeholder('int32', [None, self.dim_x], name='x')
-            self.y_ph = tf.placeholder('float32', [None, self.dim_y], name='y')
+            self.x_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x')
+            self.y_ph = tf.placeholder('float32', [None, self.data_dim[1]], name='y')
             self.keep_prob_ph = tf.placeholder('float32', name='keep_prob')
             self.layer_output = nn_model.rnn_nlp(self.x_ph, self.keep_prob_ph,
-                                                 self.word2vec, self.dim_rnn, self.dim_y)
+                                                 self.word2vec, self.dim_rnn, self.data_dim[1])
         elif self.model_type == 'bilstm_crf':
-            self.x_ph = tf.placeholder('int32', [None, self.dim_x], name='x')
-            self.y_ph = tf.placeholder('int32', [None, self.dim_y], name='y')
+            self.x_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x')
+            self.y_ph = tf.placeholder('int32', [None, self.data_dim[1]], name='y')
             self.keep_prob_ph = tf.placeholder('float32', name='keep_prob')
             self.layer_output, self.seq_len, self.transition_score_matrix = nn_model.bilstm_crf(
                 self.x_ph, self.keep_prob_ph,
@@ -650,13 +602,13 @@ class NeuralNetwork(object):
                 self.word_embd_dim
             )
         elif self.model_type == 'seq2seq':
-            self.x_ph = tf.placeholder('int32', [None, self.dim_x], name='x')
-            self.y_ph = tf.placeholder('int32', [None, self.dim_y], name='y')
+            self.x_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x')
+            self.y_ph = tf.placeholder('int32', [None, self.data_dim[1]], name='y')
             self.keep_prob_ph = tf.placeholder('float32', name='keep_prob')
             self.batch_size_ph = tf.placeholder('int32', name='batch_size')
-            self.x_extended_ph = tf.placeholder('int32', [None, self.dim_x], name='x_extended')
-            self.y_extended_ph = tf.placeholder('int32', [None, self.dim_x], name='y_extended')
-            self.vocab_size_extend_ph = tf.placeholder('int32', name='y_extended')
+            self.x_extended_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x_extended')
+            self.y_extended_ph = tf.placeholder('int32', [None, self.data_dim[1]], name='y_extended')
+            self.vocab_size_extend_ph = tf.placeholder('int32', name='vocab_size_extend')
             self.encoder, self.decoder = model_seq2seq.seq2seq(
                 self.x_ph, self.y_ph, self.keep_prob_ph, self.train_or_infer_ph, self.batch_size_ph,
                 self.x_extended_ph, self.y_extended_ph, self.vocab_size_extend_ph,
@@ -666,9 +618,9 @@ class NeuralNetwork(object):
                 self.target_seq_len_max)
             self.layer_output = self.encoder + self.decoder
         elif self.model_type == 'fm':
-            self.x_ph = tf.placeholder('float32', [None, self.dim_x], name='x')
-            self.y_ph = tf.placeholder('float32', [None, self.dim_y], name='y')
-            self.layer_output = nn_model.fm(self.x_ph, self.dim_x, self.dim_y, self.dim_lv)
+            self.x_ph = tf.placeholder('float32', [None, self.data_dim[0]], name='x')
+            self.y_ph = tf.placeholder('float32', [None, self.data_dim[1]], name='y')
+            self.layer_output = nn_model.fm(self.x_ph, self.data_dim[0], self.data_dim[1], self.dim_lv)
         else:
             print('model_type error!')
             return
@@ -676,20 +628,23 @@ class NeuralNetwork(object):
         return self.layer_output[-1]
 
     # 获取feed参数
-    def get_feed_dict(self, feed_dict_init, train_or_infer, other_feed=None):
-        feed_dict = feed_dict_init
-        # 1.标记当前模型是训练模式还是预测模式
-        # 2.配置keep_prob
+    def get_feed_dict(self, data, train_or_infer, other_feed=None):
+        feed_dict = {}
+
+        # 1.标记当前模型是训练模式还是预测模式。2.配置keep_prob。
         if 'train' == train_or_infer:
             feed_dict[self.train_or_infer_ph] = 'train'
             feed_dict[self.keep_prob_ph] = self.keep_prob
         else:
             feed_dict[self.train_or_infer_ph] = 'infer'
             feed_dict[self.keep_prob_ph] = 1.0
+
         # 根据模型是否有dropout层，以及模型用于预测还是训练，选择传入的keep_prob参数
         if self.model_type == 'test':
             pass
         elif self.model_type == 'mlp':
+            feed_dict[self.x_ph] = data[0]
+            feed_dict[self.y_ph] = data[1]
             if 'infer' == train_or_infer:
                 feed_dict[self.keep_prob_ph] = [1.0] * self.layer_num
             else:
@@ -698,19 +653,29 @@ class NeuralNetwork(object):
                 else:
                     feed_dict[self.keep_prob_ph] = self.keep_prob[:-1] + [1.0]
         elif self.model_type == 'rnn_nlp':
-            pass
+            feed_dict[self.x_ph] = data[0]
+            feed_dict[self.y_ph] = data[1]
         elif self.model_type == 'seq2seq':
-            # todo add batch_size
+            # 传入数据源序列数据
+            feed_dict[self.x_ph] = data[0]
+            feed_dict[self.x_extended_ph] = data[1]
+            # 传入扩展词表长度
+            feed_dict[self.vocab_size_extend_ph] = max([len(vocab[0]) for vocab in data[2]])
+            # 尝试传入目标序列数据
+            try:
+                feed_dict[self.y_ph] = data[3]
+                feed_dict[self.y_extended_ph] = data[4]
+            except:
+                pass
+            # 传入batch_size
+            feed_dict[self.batch_size_ph] = data[0].shape[0]
             if 'infer' == train_or_infer:
-                feed_dict[self.x_extended_ph] = other_feed['x_extended_infer']
-                feed_dict[self.vocab_size_extend_ph] = other_feed['vocab_size_extend_infer']
+                pass
             else:
                 pass
-                # feed_dict[self.x_extended_ph] = other_feed.get('x_extended_train', self.x_extended)
-                # feed_dict[self.y_extended_ph] = other_feed.get('y_extended_train', self.y_extended)
-                # feed_dict[self.vocab_size_extend_ph] = other_feed.get('vocab_size_extend_train', self.vocab_size_extend)
         elif self.model_type == 'bilstm_crf':
-            pass
+            feed_dict[self.x_ph] = data[0]
+            feed_dict[self.y_ph] = data[1]
         return feed_dict
 
     '''========================================================================'''

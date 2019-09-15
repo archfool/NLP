@@ -15,7 +15,7 @@ import os
 import time
 import tensorflow as tf
 import logging
-logging.basicConfig(level=logging.WARNING,format="[%(asctime)s] %(message)s",datefmt="%Y-%m-%d %H:%M:%S",)
+logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S",)
 from sklearn.model_selection import train_test_split
 from neural_network import NeuralNetwork
 import nn_lib
@@ -35,9 +35,9 @@ path_vocab_tgt = path_seq2seq+'zh_vocab.pkl'
 path_train_raw_tgt =  path_corpus_tgt
 path_train_done_tgt =  path_seq2seq+'train.zh'
 # 超参数
-word_embd_dim = 50
+word_embd_dim = 100
 dim_rnn = word_embd_dim
-learning_rate = 0.001
+learning_rate = 1e-3
 batch_size = 128
 # 其它参数
 test_mode = True
