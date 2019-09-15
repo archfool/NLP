@@ -193,10 +193,11 @@ class NeuralNetwork(object):
                     data_batch_concat = data_concat[step*self.batch_size: (step+1)*self.batch_size]
                     data_batch = [data_batch_concat[:, sum(self.data_dim[:i]):sum(self.data_dim[:i+1])] for i in range(len(self.data_dim))]
                     feed_dict = self.get_feed_dict(data=data_batch, train_or_infer='train')
-                    output_logits, _, loss_value, score_value = sess.run([self.model_out, optimize_step, loss, score], feed_dict=feed_dict)
+                    observer, _, loss_value, score_value = \
+                        sess.run([self.layer_output, optimize_step, loss, score], feed_dict=feed_dict)
                     # 每次迭代输出一次评估得分
                     print('step', self.step, self.eval_score_type, score_value)
-                    tmp = np.concatenate([np.reshape(np.argmax(logit, axis=1), [-1,1]) for logit in output_logits], axis=1)
+                    tmp = np.concatenate([np.reshape(np.argmax(logit, axis=1), [-1,1]) for logit in observer[-1]], axis=1)
                     # early_stop判断
                     self.early_stop_judge(score_value)
                     if self.early_stop_flag:
@@ -288,15 +289,21 @@ class NeuralNetwork(object):
         elif self.loss_fun_type == 'cross_entropy':
             loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=model_out, labels=y_true))
         elif self.loss_fun_type == 'cross_entropy_seq2seq':
-            y_true = self.y_extended_ph
+            # 目标序列真实值
+            y_true = self.y_extended_ph[:, 1:]
+            # 目标序列掩码
             y_true_seq_len = tf.cast(tf.reduce_sum(tf.sign(y_true), axis=1), tf.int32)
+            y_seq_mask = tf.cast(array_ops.sequence_mask(y_true_seq_len, self.target_seq_len_max), tf.float32)
+            # 目标序列的index
             index_batch_num = tf.expand_dims(tf.range(self.batch_size_ph), axis=1)
             y_true_list = [tf.reshape(y_true[:, step_num], [-1, 1]) for step_num in range(y_true.shape[1])]
             y_true_index = [tf.stack((index_batch_num, y_true_step), axis=2) for y_true_step in y_true_list]
-            loss_raw = [tf.gather_nd(logit, index) for (logit, index) in zip(model_out, y_true_index)]
-            y_seq_mask = tf.cast(array_ops.sequence_mask(y_true_seq_len, self.target_seq_len_max), tf.float32)
-            loss_masked = tf.concat(loss_raw, axis=1) * y_seq_mask
-            loss = -tf.reduce_sum(loss_masked)/tf.reduce_sum(y_seq_mask)
+            # 目标序列真实值的概率
+            target_probs = [tf.gather_nd(logit, index) for (logit, index) in zip(model_out, y_true_index)]
+            # 取对数，加掩码，归一化
+            loss_log = -tf.log(target_probs)
+            loss_log_masked = tf.concat(loss_log, axis=1) * y_seq_mask
+            loss = tf.reduce_sum(loss_log_masked)/tf.reduce_sum(y_seq_mask)
             # 全局变量，传递给score用
             self.loss = loss
         elif self.loss_fun_type == 'bilstm_crf':
@@ -603,11 +610,11 @@ class NeuralNetwork(object):
             )
         elif self.model_type == 'seq2seq':
             self.x_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x')
-            self.y_ph = tf.placeholder('int32', [None, self.data_dim[1]], name='y')
+            self.y_ph = tf.placeholder('int32', [None, self.data_dim[3]], name='y')
             self.keep_prob_ph = tf.placeholder('float32', name='keep_prob')
             self.batch_size_ph = tf.placeholder('int32', name='batch_size')
             self.x_extended_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x_extended')
-            self.y_extended_ph = tf.placeholder('int32', [None, self.data_dim[1]], name='y_extended')
+            self.y_extended_ph = tf.placeholder('int32', [None, self.data_dim[3]], name='y_extended')
             self.vocab_size_extend_ph = tf.placeholder('int32', name='vocab_size_extend')
             self.encoder, self.decoder = model_seq2seq.seq2seq(
                 self.x_ph, self.y_ph, self.keep_prob_ph, self.train_or_infer_ph, self.batch_size_ph,

@@ -50,7 +50,9 @@ def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
     with tf.variable_scope('decoder') as scope_decoder:
         # decoder[0] [batch_size,target_seq_len_max]:目标序列，未embedding，类型np.array
         decoder = [y_id]
-        decoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(decoder[0]), axis=1), tf.int32)
+        # target_seq同时加上了'<SOS>'和'<EOS>'，所以计算长度时要-1
+        decoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(decoder[0])-1, axis=1), tf.int32)
+        # decoder[1] [batch_size, target_seq_max_len, word_embd_dim]：对目标序列数据进行embedding
         if use_same_word_embd is True:
             decoder_word_embd = encoder_word_embd
             decoder_vocab_size = encoder_vocab_size

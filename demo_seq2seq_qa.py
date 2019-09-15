@@ -17,13 +17,12 @@ import time
 import tensorflow as tf
 import copy
 import logging
-
+from sklearn.model_selection import train_test_split
 logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S", )
 
 # 修改当前工作目录
 os.chdir(u'E:\\MachineLearning\\nlp')
 print(os.getcwd())
-from sklearn.model_selection import train_test_split
 from neural_network import NeuralNetwork
 import nn_lib
 
@@ -93,9 +92,9 @@ def preprocess_data(vocab_size):
     # 转换语料文本至id值
     q_ids = []
     q_id_extendeds = []
+    word2id_vocab_extends = []
     a_ids = []
     a_id_extendeds = []
-    word2id_vocab_extends = []
     for q, a in zip(data_q, data_a):
         # 转换问题Q至ID
         q_seg = nn_lib.str_segment(q)
@@ -107,28 +106,31 @@ def preprocess_data(vocab_size):
         word2id_vocab_extends.append(copy.copy(vocab_extend))
         # 转换答案A至ID
         a_seg = nn_lib.str_segment(a)
-        a_id = nn_lib.sentence2id(sent=a_seg, word2id_vocab=word2id_vocab, add_sos=True, build_extend_vocab=False)
+        a_id = nn_lib.sentence2id(sent=a_seg, word2id_vocab=word2id_vocab, build_extend_vocab=False)
         vocab_extend.update(word2id_vocab)
-        a_id_extended = nn_lib.sentence2id(sent=a_seg, word2id_vocab=vocab_extend, add_sos=True, build_extend_vocab=False)
+        a_id_extended = nn_lib.sentence2id(sent=a_seg, word2id_vocab=vocab_extend, build_extend_vocab=False)
         a_ids.append(a_id)
         a_id_extendeds.append(a_id_extended)
     del q, q_seg, q_id, q_id_extended, a, a_seg, a_id, a_id_extended
-    # 规整数据
-    q_ids, src_seq_len = nn_lib.pad_sequences(sequences=q_ids, max_seq_len=max_seq_len)
-    q_id_extendeds, src_seq_len = nn_lib.pad_sequences(sequences=q_id_extendeds, max_seq_len=max_seq_len)
-    a_ids, tgt_seq_len = nn_lib.pad_sequences(sequences=a_ids, max_seq_len=max_seq_len)
-    a_id_extendeds, tgt_seq_len = nn_lib.pad_sequences(sequences=a_id_extendeds, max_seq_len=max_seq_len)
+    # 序列补0，统计附加词表大小
+    q_ids = nn_lib.pad_sequences(sequences=q_ids, max_seq_len=max_seq_len)
+    q_id_extendeds = nn_lib.pad_sequences(sequences=q_id_extendeds, max_seq_len=max_seq_len)
+    a_ids = nn_lib.pad_sequences(sequences=a_ids, max_seq_len=max_seq_len, add_sos=True)
+    a_id_extendeds = nn_lib.pad_sequences(sequences=a_id_extendeds, max_seq_len=max_seq_len, add_sos=True)
     vocab_size_extened = max([len(i) for i in word2id_vocab_extends])
+    # 规整数据
     q_ids = np.array(q_ids)
     q_id_extendeds = np.array(q_id_extendeds)
     a_ids = np.array(a_ids)
     a_id_extendeds = np.array(a_id_extendeds)
     word2id_vocab_extends = np.array(word2id_vocab_extends).reshape([-1, 1])
+    # 构建训练集、测试集、验证集
     x, x_vali, x_extended, x_extended_vali, y, y_vali, y_extended, y_extended_vali, vocab_extend, vocab_extend_vali \
         = train_test_split(q_ids, q_id_extendeds, a_ids, a_id_extendeds, word2id_vocab_extends, test_size=1024*8)
     x_train, x_test, x_extended_train, x_extended_test, y_train, y_test, y_extended_train, y_extended_test, vocab_extend_train, vocab_extend_test \
         = train_test_split(x, x_extended, y, y_extended, vocab_extend, test_size=1024)
     del x, x_extended, y, y_extended, vocab_extend
+    # 存储训练集、测试集、验证集
     for name in processed_corpus_names:
         with open(path_corpus_processed + name, 'wb') as file:
             pickle.dump(eval(name), file)
@@ -170,7 +172,7 @@ if __name__ == "__main__":
                           )
     # 训练
     if True:
-        model.train(transfer_learning=True, built_in_test=True, data_test=data_test)
+        model.train(transfer_learning=True, built_in_test=False, data_test=data_test)
 
     print('Task End.')
 
