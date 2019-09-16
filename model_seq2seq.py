@@ -106,8 +106,12 @@ def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
             index_batch_num = tf.tile(index_batch_num, [1, encoder_seq_max_len])
             index = tf.stack((index_batch_num, x_id_extended), axis=2)
             # attention_dist_extendeds: list [batch_size, decoder_vocab_size+vocab_size_extend] by len decoder_step_len
-            attention_dist_extendeds = [tf.scatter_nd(index, align, [batch_size, decoder_vocab_size+vocab_size_extend])
+            attention_dist_extendeds = [tf.scatter_nd(index, align, [batch_size, encoder_vocab_size+vocab_size_extend])
                                         for align in aligns]
+            if use_same_word_embd is not True:
+                attention_dist_extendeds = [
+                    tf.concat([tf.zeros(shape=[batch_size, decoder_vocab_size], dtype=tf.float32), att_dist[:, encoder_vocab_size:]], axis=1)
+                    for att_dist in attention_dist_extendeds]
         decoder.append((vocab_dist_extendeds, attention_dist_extendeds, aligns))
         # decoder[4] 计算模型的最终输出
         # final_distributions: list of [batch_size, decoder_vocab_size+vocab_size_extend] by len target_seq_len_max

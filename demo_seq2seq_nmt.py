@@ -29,8 +29,8 @@ import nn_lib
 
 # 开关
 flag_test = False
-flag_build_vocab = True
-flag_process_data = True
+flag_build_vocab = False
+flag_process_data = False
 
 path_data = u'.\\data\\'
 path_seq2seq = path_data+u'seq2seq_nmt\\'
@@ -55,7 +55,7 @@ tgt_seq_len_max = 100
 word_embd_dim = 100
 dim_rnn = word_embd_dim
 learning_rate = 1e-3
-batch_size = 512
+batch_size = 128*2
 keep_prob = 0.95
 
 # 读取样本数据
@@ -104,11 +104,12 @@ def preprocess_data():
     tgt_id_extendeds = []
     for src, tgt in zip(corpus_src, corpus_tgt):
         # 转换src至ID
-        src_id, src_id_extended, vocab_extend = nn_lib.sentence2id(sent=src,
+        src_id, src_id_extended, vocab_extend_raw = nn_lib.sentence2id(sent=src,
                                                                    word2id_vocab=word2id_vocab_src,
                                                                    build_extend_vocab=True)
         src_ids.append(src_id)
         src_id_extendeds.append(src_id_extended)
+        vocab_extend = {key: value-len(word2id_vocab_src)+len(word2id_vocab_tgt) for key, value in vocab_extend_raw.items()}
         word2id_vocab_extends.append(copy.copy(vocab_extend))
         # 转换tgt至ID
         tgt_id = nn_lib.sentence2id(sent=tgt, word2id_vocab=word2id_vocab_tgt, build_extend_vocab=False)
@@ -131,9 +132,9 @@ def preprocess_data():
     word2id_vocab_extends = np.array(word2id_vocab_extends).reshape([-1, 1])
     # 构建训练集、测试集、验证集
     x, x_vali, x_extended, x_extended_vali, y, y_vali, y_extended, y_extended_vali, vocab_extend, vocab_extend_vali \
-        = train_test_split(src_ids, src_id_extendeds, tgt_ids, tgt_id_extendeds, word2id_vocab_extends, test_size=1024*8)
+        = train_test_split(src_ids, src_id_extendeds, tgt_ids, tgt_id_extendeds, word2id_vocab_extends, test_size=128*3)
     x_train, x_test, x_extended_train, x_extended_test, y_train, y_test, y_extended_train, y_extended_test, vocab_extend_train, vocab_extend_test \
-        = train_test_split(x, x_extended, y, y_extended, vocab_extend, test_size=1024)
+        = train_test_split(x, x_extended, y, y_extended, vocab_extend, test_size=128*2)
     del x, x_extended, y, y_extended, vocab_extend
     # 存储训练集、测试集、验证集
     for name in processed_corpus_names:

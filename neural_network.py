@@ -193,11 +193,12 @@ class NeuralNetwork(object):
                     data_batch_concat = data_concat[step*self.batch_size: (step+1)*self.batch_size]
                     data_batch = [data_batch_concat[:, sum(self.data_dim[:i]):sum(self.data_dim[:i+1])] for i in range(len(self.data_dim))]
                     feed_dict = self.get_feed_dict(data=data_batch, train_or_infer='train')
-                    observer, _, loss_value, score_value = \
-                        sess.run([self.layer_output, optimize_step, loss, score], feed_dict=feed_dict)
+                    _, loss_value, score_value = sess.run([optimize_step, loss, score], feed_dict=feed_dict)
+                    # observer, _, loss_value, score_value = \
+                    #     sess.run([self.layer_output, optimize_step, loss, score], feed_dict=feed_dict)
+                    # tmp = np.concatenate([np.reshape(np.argmax(logit, axis=1), [-1,1]) for logit in observer[-1]], axis=1)
                     # 每次迭代输出一次评估得分
                     print('step', self.step, self.eval_score_type, score_value)
-                    tmp = np.concatenate([np.reshape(np.argmax(logit, axis=1), [-1,1]) for logit in observer[-1]], axis=1)
                     # early_stop判断
                     self.early_stop_judge(score_value)
                     if self.early_stop_flag:
