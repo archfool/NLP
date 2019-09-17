@@ -49,9 +49,15 @@ def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
         encoder.append((memory, init_state))
     with tf.variable_scope('decoder') as scope_decoder:
         # decoder[0] [batch_size,target_seq_len_max]:目标序列，未embedding，类型np.array
-        decoder = [y_id]
-        # target_seq同时加上了'<SOS>'和'<EOS>'，所以计算长度时要-1
-        decoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(decoder[0])-1, axis=1), tf.int32)
+        if 'train' == train_or_infer:
+            decoder = [y_id]
+            # target_seq同时加上了'<SOS>'和'<EOS>'，所以计算长度时要-1
+            decoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(decoder[0])-1, axis=1), tf.int32)
+        elif 'infer' == train_or_infer:
+            # 预测模式下，配置decoder[0]为step长度为1的<sos>，其中sos的code为1
+            decoder = [tf.ones(shape=[batch_size, 1], dtype=tf.int32)]
+        else:
+            decoder = [tf.ones(shape=[batch_size, 1], dtype=tf.int32)]
         # decoder[1] [batch_size, target_seq_max_len, word_embd_dim]：对目标序列数据进行embedding
         if use_same_word_embd is True:
             decoder_word_embd = encoder_word_embd
@@ -233,8 +239,9 @@ def dynamic_decoder(cell, memory, memory_sequence_length, init_state, train_or_i
             cell_input = output
             # cell_input = context
         else:
-            if step_num != decoder_seq_len_max-1:
-                cell_input = target_seq_embd[:, step_num+1, :]
+            cell_input = output
+            # if step_num != decoder_seq_len_max-1:
+            #     cell_input = target_seq_embd[:, step_num+1, :]
             # print('param train_or_infer uninitialled !!!')
     return outputs, aligns, p_gens, cell_state
 

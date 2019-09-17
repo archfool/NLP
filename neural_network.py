@@ -171,11 +171,17 @@ class NeuralNetwork(object):
         with tf.Session() as sess:
             # 判断是否进行迁移学习：是新建模型，还是读取已有的模型配置
             if transfer_learning is True:
-                # 读取之前训练的模型参数
-                model_path = tf.train.latest_checkpoint(self.path_data+'model_save\\')
-                saver.restore(sess, model_path)
-                self.step = int(model_path.split('-')[-1])+1
-                print(model_path)
+                try:
+                    # 读取之前训练的模型参数
+                    model_path = tf.train.latest_checkpoint(self.path_data + 'model_save\\')
+                    saver.restore(sess, model_path)
+                    self.step = int(model_path.split('-')[-1]) + 1
+                    print(model_path)
+                except:
+                    # 初始化变量
+                    sess.run(tf.global_variables_initializer())
+                    # 初始化step计数器
+                    self.step = 0
             else:
                 # 初始化变量
                 sess.run(tf.global_variables_initializer())
@@ -226,10 +232,11 @@ class NeuralNetwork(object):
     '''==============================predict part==============================='''
     '''========================================================================='''
     # 预测
-    def infer(self, x, other_feed=None):
+    def infer(self, data):
         # 规整特征数据
-        x, _ = self.init_data(x=x)
-        
+        data = self.init_data(data)
+        batch_sum = data[0].shape[0]
+
         # 重置tf的向量空间
         tf.reset_default_graph()
         
@@ -245,7 +252,7 @@ class NeuralNetwork(object):
             # 读取模型参数
             saver.restore(sess, model_path)
             # 进行预测
-            feed_dict = self.get_feed_dict({self.x_ph: x}, train_or_infer='infer', other_feed=other_feed)
+            feed_dict = self.get_feed_dict(data=data, train_or_infer='infer')
             result = sess.run(model_out, feed_dict=feed_dict)
             if self.model_type == 'bilstm_crf':
                 logits = np.array(result)
@@ -636,7 +643,7 @@ class NeuralNetwork(object):
         return self.layer_output[-1]
 
     # 获取feed参数
-    def get_feed_dict(self, data, train_or_infer, other_feed=None):
+    def get_feed_dict(self, data, train_or_infer):
         feed_dict = {}
 
         # 1.标记当前模型是训练模式还是预测模式。2.配置keep_prob。
@@ -664,6 +671,8 @@ class NeuralNetwork(object):
             feed_dict[self.x_ph] = data[0]
             feed_dict[self.y_ph] = data[1]
         elif self.model_type == 'seq2seq':
+            # 传入batch_size
+            feed_dict[self.batch_size_ph] = data[0].shape[0]
             # 传入数据源序列数据
             feed_dict[self.x_ph] = data[0]
             feed_dict[self.x_extended_ph] = data[1]
@@ -675,8 +684,6 @@ class NeuralNetwork(object):
                 feed_dict[self.y_extended_ph] = data[4]
             except:
                 pass
-            # 传入batch_size
-            feed_dict[self.batch_size_ph] = data[0].shape[0]
             if 'infer' == train_or_infer:
                 pass
             else:
