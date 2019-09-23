@@ -23,8 +23,8 @@ logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] %(message)s", d
 
 # 修改当前工作目录
 # todo change dir
-# os.chdir(u'E:\\MachineLearning\\nlp')
-os.chdir(u'D:\\nlp')
+os.chdir(u'E:\\MachineLearning\\nlp')
+# os.chdir(u'D:\\nlp')
 print(os.getcwd())
 from neural_network import NeuralNetwork
 import nn_lib
@@ -33,13 +33,17 @@ import nn_lib
 flag_test = False
 flag_build_vocab = False
 flag_process_data = False
+flag_train = False
+flag_infer = True
+flag_transfer_learning = True
+
 
 # 超参数
 word_embd_dim = 200
 dim_rnn = word_embd_dim
-learning_rate = 1e-4
+learning_rate = 1e-3
 batch_size = 128*2
-keep_prob = 0.80
+keep_prob = 0.95
 
 path_data = u'.\\data\\'
 path_seq2seq = path_data+u'seq2seq_nmt\\'
@@ -233,18 +237,18 @@ if __name__ == "__main__":
                                            'target_seq_len_max': tgt_seq_len_max,
                                            'batch_size': batch_size},
                           hyper_parameter={'learning_rate': learning_rate,
-                                           'built_in_test_rounds': 3,
-                                           'early_stop_rounds': 150},
-                          other_parameter={'model_save_rounds': 1,
+                                           'built_in_test_rounds': 10,
+                                           'early_stop_rounds': 100},
+                          other_parameter={'model_save_rounds': 10,
                                            'path_data': path_seq2seq}
                           )
     # 训练
-    if True:
-        model.train(transfer_learning=True, built_in_test=False, data_test=data_test)
+    if flag_train:
+        model.train(transfer_learning=flag_transfer_learning, built_in_test=False, data_test=data_test)
     # 预测
-    if False:
-        en = ['how are you ?',
-              'fine , thank you !']
+    if flag_infer:
+        en = ['win',
+              'go']
         zh = nmt(model=model, corpus_src=en)
         for sent in zh:
             print(sent)

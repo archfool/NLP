@@ -45,7 +45,6 @@ def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
         memory = tf.concat(encoder_outputs, axis=2)
         init_state = init_state_reconstruct(encoder_state=state, encoder_state_type='bilstm',
                                           decoder_state_type='lstm', fill_zero=False)
-        # init_state = BiLSTM_init_state_to_LSTM(BiLSTM_state=state, fill_zero=False)
         encoder.append((memory, init_state))
     with tf.variable_scope('decoder') as scope_decoder:
         # decoder[0] [batch_size,target_seq_len_max]:目标序列，未embedding，类型np.array
@@ -57,6 +56,7 @@ def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
             # 预测模式下，配置decoder[0]为step长度为1的<sos>，其中sos的code为1
             decoder = [tf.ones(shape=[batch_size, 1], dtype=tf.int32)]
         else:
+            print('para train_or_infer have not been defined !!!')
             decoder = [tf.ones(shape=[batch_size, 1], dtype=tf.int32)]
         # decoder[1] [batch_size, target_seq_max_len, word_embd_dim]：对目标序列数据进行embedding
         if use_same_word_embd is True:
@@ -75,7 +75,7 @@ def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
             decoder_cell_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_rnn, state_is_tuple=True)
             decoder_cell = tf.nn.rnn_cell.DropoutWrapper(cell=decoder_cell_raw, output_keep_prob=keep_prob)
             outputs, aligns, p_gens, cell_state = dynamic_decoder(cell=decoder_cell, memory=memory,
-                                                                  memory_sequence_length=encoder_seq_len,
+                                                                  memory_seq_len=encoder_seq_len,
                                                                   init_state=init_state, train_or_infer=train_or_infer,
                                                                   decoder_seq_len_max=target_seq_len_max,
                                                                   target_seq_embd=decoder[1],
@@ -115,6 +115,7 @@ def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
             attention_dist_extendeds = [tf.scatter_nd(index, align, [batch_size, encoder_vocab_size+vocab_size_extend])
                                         for align in aligns]
             if use_same_word_embd is not True:
+                # todo 这里其实是删去了源序列表内单词的概率，只保留OOV单词的概率，后续需进行修正。
                 attention_dist_extendeds = [
                     tf.concat([tf.zeros(shape=[batch_size, decoder_vocab_size], dtype=tf.float32), att_dist[:, encoder_vocab_size:]], axis=1)
                     for att_dist in attention_dist_extendeds]
@@ -122,8 +123,12 @@ def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
         # decoder[4] 计算模型的最终输出
         # final_distributions: list of [batch_size, decoder_vocab_size+vocab_size_extend] by len target_seq_len_max
         with tf.variable_scope('Switching_Network') as scope_Switching_Network:
-            final_distributions = [vocab_dist*p_gen + attn_dist*(1-p_gen) for (p_gen, vocab_dist, attn_dist)
-                                   in zip(p_gens, vocab_dist_extendeds, attention_dist_extendeds)]
+            # todo do not use copynet
+            if False:
+                final_distributions = vocab_dist_extendeds
+            else:
+                final_distributions = [vocab_dist*p_gen + attn_dist*(1-p_gen) for (p_gen, vocab_dist, attn_dist)
+                                       in zip(p_gens, vocab_dist_extendeds, attention_dist_extendeds)]
 
         decoder.append(final_distributions)
     return encoder, decoder
@@ -149,7 +154,8 @@ def creat_word_embd(word_embd_pretrain=None, vocab_size=None, word_embd_dim=None
 
 
 def init_state_reconstruct(encoder_state, encoder_state_type, decoder_state_type, fill_zero=False):
-    if 'bilstm'==str.replace(str.lower(encoder_state_type), '-', '') and 'lstm'==str.replace(str.lower(decoder_state_type), '-', ''):
+    if 'bilstm'==str.replace(str.lower(encoder_state_type), '-', '') \
+            and 'lstm'==str.replace(str.lower(decoder_state_type), '-', ''):
         dim_rnn = encoder_state[0][0].shape[1].value
         ((c_fw, h_fw), (c_bw, h_bw)) = encoder_state
         c_concat = tf.concat((c_fw, c_bw), axis=1)
@@ -179,12 +185,12 @@ def init_state_reconstruct(encoder_state, encoder_state_type, decoder_state_type
 
 
 # dynamic decoder
-def dynamic_decoder(cell, memory, memory_sequence_length, init_state, train_or_infer, decoder_seq_len_max,
+def dynamic_decoder(cell, memory, memory_seq_len, init_state, train_or_infer, decoder_seq_len_max,
                     target_seq_embd, decoder_word_embd):
     """
     :param cell: rnn_cell
     :param memory: [batch_size, step_len, dim_encoder_rnn]
-    :param memory_sequence_length: [batch_size]
+    :param memory_seq_len: [batch_size]
     :param init_state: decoder_rnn_cell.state
     :param train_or_infer: str
     :param decoder_seq_len_max: int
@@ -218,7 +224,7 @@ def dynamic_decoder(cell, memory, memory_sequence_length, init_state, train_or_i
         if step_num > 0:
             variable_scope.get_variable_scope().reuse_variables()
         cell_output, cell_state = cell(cell_input, cell_state)
-        context, align = attention_mechanism(decoder_num_units=None, memory=memory, memory_sequence_length=memory_sequence_length,
+        context, align = attention_mechanism(decoder_num_units=None, memory=memory, memory_seq_len=memory_seq_len,
                                              decoder_state=cell_state, mode=1)
         # aligns
         # PointerNetwork的所有信息，只来自于aligns
@@ -229,7 +235,7 @@ def dynamic_decoder(cell, memory, memory_sequence_length, init_state, train_or_i
           p_gen = tf.sigmoid(p_gen)
           p_gens.append(p_gen)
         # outputs
-        output = linear(input=[cell_output] + [context], output_size=cell.output_size, name='decoder_output')
+        output = linear(input=[cell_output, context], output_size=cell.output_size, name='decoder_output')
         outputs.append(output)
         if 'train' == train_or_infer:
             # outputs的信息只用于GenerateNetwork，所以只利用了source序列的未扩展的embedding。
@@ -246,12 +252,12 @@ def dynamic_decoder(cell, memory, memory_sequence_length, init_state, train_or_i
     return outputs, aligns, p_gens, cell_state
 
 # Attention Mechanism
-def attention_mechanism(decoder_num_units, memory, memory_sequence_length, decoder_state, mode=1):
+def attention_mechanism(decoder_num_units, memory, memory_seq_len, decoder_state, mode=1):
     """
     :param decoder_num_units: dim of decoder vector
     :param memory: [batch_size, encoder_step_len_max, dim_rnn*2]
     :param decoder_state: [batch_size, decode_state_size]
-    :param memory_sequence_length: [batch_size]
+    :param memory_seq_len: [batch_size]
     :param mode: bool
     :return: context: [batch_size, dim_rnn]
     :return: align: [batch_size, encoder_step_len]
@@ -271,26 +277,29 @@ def attention_mechanism(decoder_num_units, memory, memory_sequence_length, decod
 
         # memory_expand: [batch_size, step_len, 1, dim_rnn*2]
         memory_expand = tf.expand_dims(memory, axis=2)
-        w_memory = tf.get_variable(name="w_memory", trainable=True, shape=[1, 1, dim_bi_rnn, dim_rnn])
+        memory_w_init = tf.truncated_normal(shape=[1, 1, dim_bi_rnn, dim_rnn],
+                                            stddev=math.sqrt(6 / (dim_bi_rnn + dim_rnn)),
+                                            dtype=tf.float32)
+        memory_w = tf.get_variable(name='memory_w', trainable=True, initializer=memory_w_init)
         # encoder_feature: [batch_size, step_len, 1, dim_rnn]
-        encoder_feature = nn_ops.conv2d(memory_expand, w_memory, [1, 1, 1, 1], "SAME")
+        encoder_feature = nn_ops.conv2d(memory_expand, memory_w, [1, 1, 1, 1], "SAME")
     with tf.variable_scope('decoder_feature'):
         # w_dec_state = tf.get_variable(name="w_dec_state", trainable=True, shape=[total_arg_size, output_size])
         # decoder_feature_raw: [batch_size, dim_rnn]
-        decoder_feature_raw = linear(input=decoder_state, output_size=dim_rnn, name="w_dec_state")
+        decoder_feature_raw = linear(input=decoder_state, output_size=dim_rnn, name="decoder_feature")
         # decoder_feature: [batch_size, 1, 1, dim_rnn]
         decoder_feature = tf.expand_dims(tf.expand_dims(decoder_feature_raw, 1), 1)
     with tf.variable_scope('align'):
         # bias: [dim_rnn]
-        bias = tf.get_variable(name='bias', trainable=True,
-                               initializer=tf.truncated_normal([dim_rnn], stddev=0.1, dtype=tf.float32))
+        bias_init = tf.truncated_normal([dim_rnn], stddev=0.1, dtype=tf.float32)
+        bias = tf.get_variable(name='bias', trainable=True, initializer=bias_init)
         # v: [dim_rnn]
         v = tf.get_variable(name="v", trainable=True, shape=[dim_rnn])
         # score: [batch_size, step_len]
         score = math_ops.reduce_sum(v * math_ops.tanh(encoder_feature + decoder_feature + bias), [2, 3])
         # 归一化
         # align: [batch_size, step_len]
-        align = seq_mask_norm(score, memory_sequence_length, step_max_len)
+        align = seq_mask_norm(score, memory_seq_len, step_max_len)
     with tf.variable_scope('context'):
         # context: [batch_size, dim_rnn]
         context = math_ops.reduce_sum(array_ops.reshape(align, [-1, step_max_len, 1, 1]) * encoder_feature, [1, 2])
@@ -326,12 +335,21 @@ def linear(input, output_size, name=None):
             total_arg_size += shape[1]
 
     # Now the computation.
-    matrix = tf.get_variable(name=name, trainable=True, shape=[total_arg_size, output_size])
+    weight = tf.get_variable(
+        name=name+'_weight', trainable=True,
+        initializer=tf.truncated_normal([total_arg_size, output_size],
+                                        stddev=math.sqrt(6 / (total_arg_size + output_size)),
+                                        dtype=tf.float32)
+    )
+    bias = tf.get_variable(
+        name=name+'_bias', trainable=True,
+        initializer=tf.truncated_normal([output_size], stddev=0.1, dtype=tf.float32)
+    )
     # perhaps the list means multi-layers
     if len(input) == 1:
-        output = tf.matmul(input[0], matrix)
+        output = tf.add(tf.matmul(input[0], weight), bias)
     else:
-        output = tf.matmul(tf.concat(axis=1, values=input), matrix)
+        output = tf.add(tf.matmul(tf.concat(axis=1, values=input), weight), bias)
     return output
 
 # 对序列按序列实际长度取掩码，并进行归一化

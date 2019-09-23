@@ -91,7 +91,8 @@ def read_word2id_dict(path):
 
 
 # 将句子转化为ID序列
-def sentence2id(sent, word2id_vocab, add_eos=True, retain_eng=True, retain_digit=True, build_extend_vocab=False):
+def sentence2id(sent, word2id_vocab, add_eos=True, reverse=False,
+                retain_eng=True, retain_digit=True, build_extend_vocab=False):
     sent = list(sent)
     sentence_id = []
     vocab_extend = {}
@@ -129,12 +130,17 @@ def sentence2id(sent, word2id_vocab, add_eos=True, retain_eng=True, retain_digit
             sentence_id.append(word_id)
      # 使用扩展词表
     if build_extend_vocab is True:
+        if reverse is True:
+            sentence_id = sentence_id[::-1]
+            sentence_id_extended = sentence_id_extended[::-1]
         if add_eos is True:
             sentence_id.append(word2id_list_const['<EOS>'])
             sentence_id_extended.append(word2id_list_const['<EOS>'])
         return sentence_id, sentence_id_extended, vocab_extend
     # 不使用扩展词表
     else:
+        if reverse is True:
+            sentence_id = sentence_id[::-1]
         if add_eos is True:
             sentence_id.append(word2id_list_const['<EOS>'])
         return sentence_id
@@ -156,7 +162,7 @@ def pad_sequences(sequences, max_seq_len, add_sos=False, pad_mark=0):
     for seq in sequences:
         seq = list(seq)
         seq_ = seq[:max_len] + [pad_mark] * max(max_len - len(seq), 0)
-        seq_[-1] = word2id_list_const['<EOS>'] if seq_[-1] != 0 else 0
+        # seq_[-1] = word2id_list_const['<EOS>'] if seq_[-1] != 0 else 0
         if add_sos is True:
             seq_list.append([word2id_list_const['<SOS>']]+seq_)
         else:

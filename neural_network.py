@@ -14,8 +14,6 @@ import tensorflow as tf
 import math
 import os
 import gc
-import nn_model
-import model_seq2seq
 from sklearn.preprocessing import StandardScaler
 import logging
 from tensorflow.python.ops import variable_scope
@@ -23,10 +21,12 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import math_ops
 import nn_lib
+import nn_model
+import model_seq2seq
+import model_ner
 
 logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
-flag_seq2seq = True
 
 class NeuralNetwork(object):
     """none"""
@@ -175,7 +175,7 @@ class NeuralNetwork(object):
                     # 读取之前训练的模型参数
                     model_path = tf.train.latest_checkpoint(self.path_data + 'model_save\\')
                     saver.restore(sess, model_path)
-                    self.step = int(model_path.split('-')[-1]) + 1
+                    self.step = int(model_path.split('-')[-1])
                     print(model_path)
                 except:
                     # 初始化变量
@@ -200,9 +200,30 @@ class NeuralNetwork(object):
                     data_batch = [data_batch_concat[:, sum(self.data_dim[:i]):sum(self.data_dim[:i+1])] for i in range(len(self.data_dim))]
                     feed_dict = self.get_feed_dict(data=data_batch, train_or_infer='train')
                     _, loss_value, score_value = sess.run([optimize_step, loss, score], feed_dict=feed_dict)
-                    # observer, _, loss_value, score_value = \
-                    #     sess.run([self.layer_output, optimize_step, loss, score], feed_dict=feed_dict)
-                    # tmp = np.concatenate([np.reshape(np.argmax(logit, axis=1), [-1,1]) for logit in observer[-1]], axis=1)
+                    if False:
+                        tmp = []
+                        y_true = self.y_extended_ph[:, 1:]
+                        tmp.append(y_true)
+                        # 目标序列掩码
+                        y_true_seq_len = tf.cast(tf.reduce_sum(tf.sign(y_true), axis=1), tf.int32)
+                        tmp.append(y_true_seq_len)
+                        y_seq_mask = tf.cast(array_ops.sequence_mask(y_true_seq_len, self.target_seq_len_max),
+                                             tf.float32)
+                        tmp.append(y_seq_mask)
+                        # 目标序列的index
+                        index_batch_num = tf.expand_dims(tf.range(self.batch_size_ph), axis=1)
+                        y_true_list = [tf.reshape(y_true[:, step_num], [-1, 1]) for step_num in range(y_true.shape[1])]
+                        y_true_index = [tf.stack((index_batch_num, y_true_step), axis=2) for y_true_step in y_true_list]
+                        tmp.append(y_true_index)
+                        # 目标序列真实值的概率
+                        target_probs = [tf.gather_nd(logit, index) for (logit, index) in zip(self.model_out, y_true_index)]
+                        tmp.append(target_probs)
+                        # 取对数，加掩码，归一化
+                        loss_log = -tf.log(target_probs)
+                        tmp.append(loss_log)
+                        observer, tmp1 = sess.run([self.layer_output, tmp], feed_dict=feed_dict)
+                        tmp2 = np.concatenate([np.reshape(np.argmax(logit, axis=1), [-1,1]) for logit in observer[-1]], axis=1)
+                        print('1')
                     # 每次迭代输出一次评估得分
                     print('step', self.step, self.eval_score_type, score_value)
                     # early_stop判断
@@ -610,7 +631,7 @@ class NeuralNetwork(object):
             self.x_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x')
             self.y_ph = tf.placeholder('int32', [None, self.data_dim[1]], name='y')
             self.keep_prob_ph = tf.placeholder('float32', name='keep_prob')
-            self.layer_output, self.seq_len, self.transition_score_matrix = nn_model.bilstm_crf(
+            self.layer_output, self.seq_len, self.transition_score_matrix = model_ner.bilstm_crf(
                 self.x_ph, self.keep_prob_ph,
                 self.dim_rnn, self.label_num,
                 self.word_embd_pretrain, self.vocab_num,
@@ -690,7 +711,10 @@ class NeuralNetwork(object):
                 pass
         elif self.model_type == 'bilstm_crf':
             feed_dict[self.x_ph] = data[0]
-            feed_dict[self.y_ph] = data[1]
+            try:
+                feed_dict[self.y_ph] = data[1]
+            except:
+                pass
         return feed_dict
 
     '''========================================================================'''
