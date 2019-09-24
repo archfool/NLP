@@ -15,16 +15,16 @@ from tensorflow.python.ops import math_ops
 import nn_lib
 
 
-def bilstm_crf(x, keep_prob, dim_rnn, label_num, word_embd_pretrain=None, vocab_size=None, word_embd_dim=None):
+def bilstm_crf(x, keep_prob, dim_rnn, label_num, seq_len_max, word_embd_pretrain=None, vocab_size=None, word_embd_dim=None):
     with tf.variable_scope('bilstm_layer'):
         # layer[0] 输入数据，已onehot，未embedding
-        # x:[batch_size,step_len]
+        # x:[batch_size,seq_len_max]
         layer_output = [x]
         # batch_len = layer_output[0].shape[0].value
-        step_len = layer_output[0].shape[1].value
+        # seq_len_max = layer_output[0].shape[1].value
         seq_len = tf.cast(tf.reduce_sum(tf.sign(layer_output[0]), axis=1), tf.int32)
         # layer[1] 进行embedding
-        # word_embd:[batch_size,step_len,embd_dim]
+        # word_embd:[batch_size,seq_len_max,embd_dim]
         if isinstance(word_embd_pretrain, np.ndarray):
             word_embd = tf.get_variable(name='word_embd', trainable=True,
                                         initializer=word_embd_pretrain)
@@ -39,7 +39,7 @@ def bilstm_crf(x, keep_prob, dim_rnn, label_num, word_embd_pretrain=None, vocab_
         embedding_w2v = tf.nn.embedding_lookup(word_embd, layer_output[0])
         layer_output.append(embedding_w2v)
         # layer[2] 生成BiLSTM实体，并进行dropout
-        # lstm_layer:[batch_size,step_len,dim_rnn*2]
+        # lstm_layer:[batch_size,seq_len_max,dim_rnn*2]
         lstm_cell_fw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_rnn, state_is_tuple=True)
         lstm_cell_bw_raw = tf.nn.rnn_cell.BasicLSTMCell(num_units=dim_rnn, state_is_tuple=True)
         lstm_cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell=lstm_cell_fw_raw, output_keep_prob=keep_prob)
@@ -62,7 +62,7 @@ def bilstm_crf(x, keep_prob, dim_rnn, label_num, word_embd_pretrain=None, vocab_
             initializer=tf.truncated_normal([label_num], stddev=0.1, dtype=tf.float32)
         )
         fc_hidden = tf.matmul(fc_hidden_raw, weight) + bias
-        layer_output.append(tf.reshape(fc_hidden, [-1, step_len, label_num]))
+        layer_output.append(tf.reshape(fc_hidden, [-1, seq_len_max, label_num]))
     with tf.variable_scope('crf_layer'):
         transition_score_matrix = tf.get_variable(name='transition_score_matrix',
                                                   trainable=True, shape=[label_num, label_num])

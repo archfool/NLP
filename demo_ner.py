@@ -34,11 +34,13 @@ flag_process_data = False
 flag_train = False
 flag_test = True
 flag_output_para = False
+flag_transfer_learning =True
+flag_built_in_test = True
 
 # 超参数
 word_embd_dim = 300
 dim_rnn = 300
-learning_rate = 0.0001
+learning_rate = 1e-4
 batch_size = 1024
 keep_prob = 0.9
 
@@ -149,20 +151,15 @@ def ner_predict(model, x, word2id, label2id, max_len=None, do_word2id=True):
     seqs = np.array(seqs)
     # 预测标签
     label_id_list = model.infer([seqs])
-    # label_list = []
-    # for row in label_id_list:
-    #     label_list.append(series(row).map(id2label).tolist())
-    # # 文本-标签
-    # word_label_list = []
-    # for words, labels in zip(word_list, label_list):
-    #     word_label = []
-    #     for word, label in zip(words, labels):
-    #         if label == label:
-    #             word_label.append((word, label))
-    #         else:
-    #             break
-    #     word_label_list.append(word_label)
-    return seqs, label_id_list
+    # 拼接语料和标签
+    corpus_labels = []
+    for i in range(len(word_list)):
+        corpus_label = []
+        for j in range(len(word_list[i])):
+            corpus_label.append((word_list[i][j], id2label[label_id_list[i][j]]))
+        corpus_labels.append(corpus_label)
+
+    return corpus_labels
 
 
 
@@ -186,20 +183,21 @@ if __name__ == '__main__':
                                            'dim_rnn': dim_rnn,
                                            'batch_size': batch_size},
                           hyper_parameter={'learning_rate': learning_rate,
-                                           'early_stop_rounds': 300},
-                          other_parameter={'model_save_rounds': 2,
+                                           'early_stop_rounds': 150,
+                                           'built_in_test_rounds': 20},
+                          other_parameter={'model_save_rounds': 50,
                                            'path_data': path_ner}
                           )
     # 训练
     if flag_train is True:
-        model.train(data=data, transfer_learning=False, built_in_test=False, data_test=data_test)
+        model.train(data=data, transfer_learning=flag_transfer_learning, built_in_test=flag_built_in_test, data_test=data_test)
     # 预测
     if flag_test is True:
         x_tmp = ['我明天上午十点要去深圳福田区平安大厦拜访王先生卖平安福', '五一广场', '毛泽东雕像', '万科小区', '福州市一建宿舍', '新华书店', '福建新华发行集团', \
                  '火巷里', '工商银行宿舍阳光假日公寓', '福建省二轻宿舍', '新侨联广场', \
                  '福建省新闻出版局得贵巷小区', '水部综合大楼', '高工小区', '榕城花园', '阳光城一区', \
                  '福宏小区', '水涧新村', '省工商银行宿舍']
-        a,b = ner_predict(model, x_tmp, word2id, label2id, max_len=100, do_word2id=True)
+        corpus_labels = ner_predict(model, x_tmp, word2id, label2id, max_len=None, do_word2id=True)
     # 导出模型参数
     if flag_output_para is True:
         model.params_output()

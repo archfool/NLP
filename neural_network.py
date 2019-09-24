@@ -364,7 +364,7 @@ class NeuralNetwork(object):
                 self.eval_score_type = 'cross_entropy_seq2seq'
         else:
             self.eval_score_type = eval_score_type
-        self.built_in_test_rounds = hyper_parameter.get('built_in_test_rounds', 30)
+        self.built_in_test_rounds = hyper_parameter.get('built_in_test_rounds', 20)
         self.early_stop_rounds = hyper_parameter.get('early_stop_rounds', None)
         self.early_stop_score_list = []
         self.early_stop_flag = False
@@ -628,12 +628,15 @@ class NeuralNetwork(object):
             self.layer_output = nn_model.rnn_nlp(self.x_ph, self.keep_prob_ph,
                                                  self.word2vec, self.dim_rnn, self.data_dim[1])
         elif self.model_type == 'bilstm_crf':
-            self.x_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x')
-            self.y_ph = tf.placeholder('int32', [None, self.data_dim[1]], name='y')
+            self.seq_len_max_ph = tf.placeholder('int32', name='seq_len_max')
+            # self.x_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x')
+            # self.y_ph = tf.placeholder('int32', [None, self.data_dim[1]], name='y')
+            self.x_ph = tf.placeholder('int32', [None, None], name='x')
+            self.y_ph = tf.placeholder('int32', [None, None], name='y')
             self.keep_prob_ph = tf.placeholder('float32', name='keep_prob')
             self.layer_output, self.seq_len, self.transition_score_matrix = model_ner.bilstm_crf(
                 self.x_ph, self.keep_prob_ph,
-                self.dim_rnn, self.label_num,
+                self.dim_rnn, self.label_num, self.seq_len_max_ph,
                 self.word_embd_pretrain, self.vocab_num,
                 self.word_embd_dim
             )
@@ -711,6 +714,7 @@ class NeuralNetwork(object):
                 pass
         elif self.model_type == 'bilstm_crf':
             feed_dict[self.x_ph] = data[0]
+            feed_dict[self.seq_len_max_ph] = data[0].shape[1]
             try:
                 feed_dict[self.y_ph] = data[1]
             except:
