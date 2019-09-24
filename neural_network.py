@@ -155,12 +155,13 @@ class NeuralNetwork(object):
         score = self.cal_score(y_true=self.y_ph, y_predict=self.model_out, score_type=self.eval_score_type)
 
         # 初始化内置验证集评估模块
-        self.built_in_test_stop_flag = False
+        self.early_stop_flag_built_in_test = False
         if built_in_test is True:
             data_test = self.init_data(data_test)
             feed_dict_test = self.get_feed_dict(data=data_test, train_or_infer='infer')
             built_in_test_cal = self.cal_score(y_true=self.y_ph, y_predict=self.model_out, score_type=self.eval_score_type)
-            self.built_in_test_stop_score_list = []
+            # self.built_in_test_stop_score_list = []
+            self.early_stop_score_list_built_in_test = []
 
         # 初始化模型存取器
         saver = tf.train.Saver(max_to_keep=10)
@@ -227,7 +228,8 @@ class NeuralNetwork(object):
                     # 每次迭代输出一次评估得分
                     print('step', self.step, self.eval_score_type, score_value)
                     # early_stop判断
-                    self.early_stop_judge(score_value)
+                    self.early_stop_flag, self.early_stop_score_list = \
+                        self.early_stop_judge(score_value, self.early_stop_score_list, self.early_stop_rounds)
                     if self.early_stop_flag:
                         print('good model!')
                         break
@@ -235,14 +237,17 @@ class NeuralNetwork(object):
                     if self.step % self.model_save_rounds == 0:
                         saver.save(sess, self.path_data+u'model_save\\mnist.ckpt', global_step=self.step)
                         gc.collect()
+                    # 内置验证集校验
                     if (built_in_test is True) and ((self.step % self.built_in_test_rounds) == 0):
                         built_in_test_score = sess.run(built_in_test_cal, feed_dict=feed_dict_test)
                         print('====== built_in_test', self.eval_score_type, built_in_test_score, ' ======')
-                        self.built_in_test_stop_judge(built_in_test_score)
-                        if self.built_in_test_stop_flag:
+                        self.early_stop_flag_built_in_test, self.early_stop_score_list_built_in_test = \
+                            self.early_stop_judge(built_in_test_score, self.early_stop_score_list_built_in_test, self.early_stop_rounds_built_in_test)
+                        # self.built_in_test_stop_judge(built_in_test_score)
+                        if self.early_stop_flag_built_in_test:
                             print('good model!')
                             break
-                if self.early_stop_flag or self.built_in_test_stop_flag:
+                if self.early_stop_flag or self.early_stop_flag_built_in_test:
                     print('good model!')
                     break
             saver.save(sess, self.path_data+u'model_save\\mnist.ckpt', global_step=self.step)
@@ -366,6 +371,7 @@ class NeuralNetwork(object):
             self.eval_score_type = eval_score_type
         self.built_in_test_rounds = hyper_parameter.get('built_in_test_rounds', 20)
         self.early_stop_rounds = hyper_parameter.get('early_stop_rounds', None)
+        self.early_stop_rounds_built_in_test = hyper_parameter.get('early_stop_rounds_built_in_test', None)
         self.early_stop_score_list = []
         self.early_stop_flag = False
         return self.eval_score_type
@@ -442,11 +448,11 @@ class NeuralNetwork(object):
                 return
     
     # early_stop判定
-    def early_stop_judge(self, new_score):
+    def early_stop_judge(self, new_score, early_stop_score_list, early_stop_rounds):
+        early_stop_flag = False
         # 判断是否使用early_stop
-        if self.early_stop_rounds is None:
-            self.early_stop_flag = False
-            return
+        if early_stop_rounds is None:
+            return False, None
         # 判断评估函数值是大点好，还是小点好
         if self.eval_score_type in ['mse', 'mae', 'bilstm_crf_loss', 'cross_entropy_seq2seq']:
             minimize = True
@@ -456,57 +462,57 @@ class NeuralNetwork(object):
             minimize = True
             print('eval_score_type error!')
         # 判断early_stop
-        if len(self.early_stop_score_list) < self.early_stop_rounds:
-            self.early_stop_score_list = self.early_stop_score_list + [new_score]
+        if len(early_stop_score_list) < early_stop_rounds:
+            early_stop_score_list = early_stop_score_list + [new_score]
         else:
-            if self.early_stop_rounds > 10:
+            if early_stop_rounds > 10:
                 n_tmp = 5
-                ths = (sum(sorted(self.early_stop_score_list[-n_tmp-1:])[1:n_tmp])+new_score)/n_tmp
+                ths = (sum(sorted(early_stop_score_list[-n_tmp-1:])[1:n_tmp])+new_score)/n_tmp
             else:
                 ths = new_score
             if minimize is True:
-                self.early_stop_flag = ([x for x in self.early_stop_score_list if x > ths] == [])
+                early_stop_flag = ([x for x in early_stop_score_list if x > ths] == [])
             else:
-                self.early_stop_flag = ([x for x in self.early_stop_score_list if x < ths] == [])
-            self.early_stop_score_list = self.early_stop_score_list + [new_score]
-            self.early_stop_score_list = self.early_stop_score_list[-self.early_stop_rounds:]
-        return
+                early_stop_flag = ([x for x in early_stop_score_list if x < ths] == [])
+            early_stop_score_list = early_stop_score_list + [new_score]
+            early_stop_score_list = early_stop_score_list[-early_stop_rounds:]
+        return early_stop_flag, early_stop_score_list
     
-    # built_in_test_stop判定
-    def built_in_test_stop_judge(self, built_in_test_score):
-        # 判断是否使用built_in_test_stop
-        if self.built_in_test is False:
-            self.built_in_test_stop_flag = False
-            return
-        if self.early_stop_rounds is None:
-            return
-        # 判断评估函数值是大点好，还是小点好
-        if self.eval_score_type in ['mse', 'mae', 'bilstm_crf_loss', 'cross_entropy_seq2seq']:
-            minimize = True
-        elif self.eval_score_type in ['f1_score', 'precision', 'recall', 'accuracy']:
-            minimize = False
-        else:
-            print('eval_score_type error!')
-            return
-        # 判断built_in_test_stop
-        stop_lst_len = 3
-        compared_stop_lst_len = 50
-        compared_score_list = self.early_stop_score_list[-compared_stop_lst_len:]
-#         compared_score = sum(compared_score_list)*1.0/len(compared_score_list)
-        if len(self.built_in_test_stop_score_list) < stop_lst_len:
-            self.built_in_test_stop_score_list = self.built_in_test_stop_score_list + [built_in_test_score]
-        else:
-            self.built_in_test_stop_score_list = self.built_in_test_stop_score_list + [built_in_test_score]
-            self.built_in_test_stop_score_list = self.built_in_test_stop_score_list[-stop_lst_len:]
-            if minimize is True:
-                ths = min(self.built_in_test_stop_score_list)
-                compared_score = max(compared_score_list)
-                self.built_in_test_stop_flag = (compared_score < ths)
-            else:
-                ths = max(self.built_in_test_stop_score_list)
-                compared_score = min(compared_score_list)
-                self.built_in_test_stop_flag = (compared_score > ths)
-        return
+#     # built_in_test_stop判定
+#     def built_in_test_stop_judge(self, built_in_test_score):
+#         # 判断是否使用built_in_test_stop
+#         if self.built_in_test is False:
+#             self.built_in_test_stop_flag = False
+#             return
+#         if self.early_stop_rounds is None:
+#             return
+#         # 判断评估函数值是大点好，还是小点好
+#         if self.eval_score_type in ['mse', 'mae', 'bilstm_crf_loss', 'cross_entropy_seq2seq']:
+#             minimize = True
+#         elif self.eval_score_type in ['f1_score', 'precision', 'recall', 'accuracy']:
+#             minimize = False
+#         else:
+#             print('eval_score_type error!')
+#             return
+#         # 判断built_in_test_stop
+#         stop_lst_len = 3
+#         compared_stop_lst_len = 50
+#         compared_score_list = self.early_stop_score_list[-compared_stop_lst_len:]
+# #         compared_score = sum(compared_score_list)*1.0/len(compared_score_list)
+#         if len(self.built_in_test_stop_score_list) < stop_lst_len:
+#             self.built_in_test_stop_score_list = self.built_in_test_stop_score_list + [built_in_test_score]
+#         else:
+#             self.built_in_test_stop_score_list = self.built_in_test_stop_score_list + [built_in_test_score]
+#             self.built_in_test_stop_score_list = self.built_in_test_stop_score_list[-stop_lst_len:]
+#             if minimize is True:
+#                 ths = min(self.built_in_test_stop_score_list)
+#                 compared_score = max(compared_score_list)
+#                 self.built_in_test_stop_flag = (compared_score < ths)
+#             else:
+#                 ths = max(self.built_in_test_stop_score_list)
+#                 compared_score = min(compared_score_list)
+#                 self.built_in_test_stop_flag = (compared_score > ths)
+#         return
     
     # 初始化优化器
     def init_optimizer(self, optimizer_type, hyper_parameter):

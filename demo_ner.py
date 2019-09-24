@@ -31,7 +31,7 @@ import nn_lib
 # 开关
 flag_build_vocab = False
 flag_process_data = False
-flag_train = False
+flag_train = True
 flag_test = True
 flag_output_para = False
 flag_transfer_learning =True
@@ -40,9 +40,9 @@ flag_built_in_test = True
 # 超参数
 word_embd_dim = 300
 dim_rnn = 300
-learning_rate = 1e-4
-batch_size = 1024
-keep_prob = 0.9
+learning_rate = 1e-3
+batch_size = 2048
+keep_prob = 0.8
 
 path_data = u'.\\data\\'
 path_ner = path_data + u'ner\\'
@@ -184,7 +184,8 @@ if __name__ == '__main__':
                                            'batch_size': batch_size},
                           hyper_parameter={'learning_rate': learning_rate,
                                            'early_stop_rounds': 150,
-                                           'built_in_test_rounds': 20},
+                                           'built_in_test_rounds': 5,
+                                           'early_stop_rounds_built_in_test': 20},
                           other_parameter={'model_save_rounds': 50,
                                            'path_data': path_ner}
                           )
