@@ -25,6 +25,7 @@ logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] %(message)s", d
 # todo change dir
 os.chdir(u'E:\\MachineLearning\\nlp')
 # os.chdir(u'D:\\nlp')
+path_data = u'..\\data\\'
 print(os.getcwd())
 from neural_network import NeuralNetwork
 import nn_lib
@@ -33,9 +34,9 @@ import nn_lib
 flag_test = False
 flag_build_vocab = False
 flag_process_data = False
-flag_train = False
+flag_train = True
 flag_infer = True
-flag_transfer_learning = True
+flag_transfer_learning = False
 
 
 # 超参数
@@ -45,7 +46,6 @@ learning_rate = 1e-3
 batch_size = 128*2
 keep_prob = 0.95
 
-path_data = u'.\\data\\'
 path_seq2seq = path_data+u'seq2seq_nmt\\'
 path_corpus_processed = path_data + u'seq2seq_nmt\\corpus_processed\\'
 processed_corpus_names = ['x_train', 'x_test', 'x_vali', 'x_extended_train', 'x_extended_test', 'x_extended_vali',
@@ -57,13 +57,13 @@ vocab_size_src = 8000
 path_corpus_src = path_seq2seq+'train.txt.en'
 path_vocab_src = path_seq2seq+'vocab_en.pkl'
 path_corpus_processed_src = path_seq2seq+'corpus_processed_en'
-src_seq_len_max = 200
+src_seq_len_max = 199
 # 目标序列词库相关参数
 vocab_size_tgt = 4000
 path_corpus_tgt = path_seq2seq+'train.txt.zh'
 path_vocab_tgt = path_seq2seq+'vocab_zh.pkl'
 path_corpus_processed_tgt = path_seq2seq+'corpus_processed_zh'
-tgt_seq_len_max = 100
+tgt_seq_len_max = 99
 
 
 # 读取样本数据

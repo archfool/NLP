@@ -22,8 +22,7 @@ from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import math_ops
 import nn_lib
 import nn_model
-import model_seq2seq
-import model_ner
+
 
 logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
@@ -547,32 +546,26 @@ class NeuralNetwork(object):
     '''========================================================================'''
     # 初始化模型参数
     def init_model_para(self, model_type, model_parameter):
+        # todo move to creat_model
         # 检测model_parameter参数是否为字典
         if not isinstance(model_parameter, dict):
             print('model_parameter is not dict type!!!')
             return
-        # 如果模型类型字段为空，则根据任务类型，配置为缺省模型类型
-        if model_type is None:
-            if self.task_type == 'regression':
-                self.model_type = 'mlp'
-            elif self.task_type == 'classification':
-                self.model_type = 'mlp'
-            elif self.task_type == 'seq_generation':
-                self.model_type = 'seq2seq'
-        else:
-            self.model_type = model_type
-        
+        # 配置模型类型
+        self.model_type = model_type
+
         # 配置批处理样本个数
         self.batch_size = model_parameter.get('batch_size', 1024)
-        # 确定模型当前处于训练模式还是预测模式
-        self.train_or_infer = model_parameter.get('train_or_infer', 'infer')
+        # 获取keep_prob参数
+        self.keep_prob = model_parameter.get('keep_prob', [1.0])
 
         # 根据模型类型，初始化模型参数
         if self.model_type == 'test':
             pass
         elif self.model_type == 'mlp':
-            # 获取keep_prob参数
-            self.keep_prob = list(model_parameter.get('keep_prob', [1.0]))
+            # 修正keep_prob格式
+            if isinstance(self.keep_prob, float):
+                self.keep_prob = [self.keep_prob]
             # 获取每层网络的神经元个数
             self.dim = [self.data_dim[0]]+list(model_parameter.get('dim', []))+[self.data_dim[1]]
             # 获取神经网络层数
@@ -584,12 +577,10 @@ class NeuralNetwork(object):
             else:
                 self.activation_fun[-1] = None
         elif self.model_type == 'rnn_nlp':
-            self.keep_prob = model_parameter.get('keep_prob', 1.0)
             self.word2vec = model_parameter.get('word2vec')
             self.dim_rnn = model_parameter.get('dim_rnn', 128)
             self.layer_num = 1
         elif self.model_type == 'bilstm_crf':
-            self.keep_prob = model_parameter.get('keep_prob', 1.0)
             self.word_embd_pretrain = model_parameter.get('word_embd_pretrain')
             self.dim_rnn = model_parameter.get('dim_rnn', 200)
             self.label_num = model_parameter.get('label_num', None)
@@ -597,10 +588,6 @@ class NeuralNetwork(object):
             self.word_embd_dim = model_parameter.get('word_embd_dim', None)
             self.layer_num = 1
         elif self.model_type == 'seq2seq':
-            self.keep_prob = model_parameter.get('keep_prob', 1.0)
-            # self.x_extended = model_parameter.get('x_id_extended', None)
-            # self.y_extended = model_parameter.get('y_id_extended', None)
-            # self.vocab_size_extend = model_parameter.get('vocab_size_extend', None)
             self.word_embd_dim = model_parameter.get('word_embd_dim', 300)
             self.dim_rnn = model_parameter.get('dim_rnn', 300)
             self.use_same_word_embd = model_parameter.get('use_same_word_embd', True)
@@ -620,41 +607,47 @@ class NeuralNetwork(object):
     
     # 构建模型
     def creat_model(self):
+        # 确定模型当前处于训练模式还是预测模式
         self.train_or_infer_ph = tf.placeholder(tf.string, name='train_or_infer')
+        # keep_probability
+        self.keep_prob_ph = tf.placeholder('float32', [self.layer_num], name='keep_prob')
+
         if self.model_type == 'mlp':
+            # 配置placeholder
             self.x_ph = tf.placeholder('float32', [None, self.data_dim[0]], name='x')
             self.y_ph = tf.placeholder('float32', [None, self.data_dim[1]], name='y')
-            self.keep_prob_ph = tf.placeholder('float32', [self.layer_num], name='keep_prob')
+            # 构建模型
             self.layer_output = nn_model.mlp(self.x_ph, self.keep_prob_ph,
                                              self.activation_fun, self.layer_num, self.dim)
         elif self.model_type == 'rnn_nlp':
+            # 配置placeholder
             self.x_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x')
             self.y_ph = tf.placeholder('float32', [None, self.data_dim[1]], name='y')
-            self.keep_prob_ph = tf.placeholder('float32', name='keep_prob')
+            # 构建模型
             self.layer_output = nn_model.rnn_nlp(self.x_ph, self.keep_prob_ph,
                                                  self.word2vec, self.dim_rnn, self.data_dim[1])
         elif self.model_type == 'bilstm_crf':
-            self.seq_len_max_ph = tf.placeholder('int32', name='seq_len_max')
-            # self.x_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x')
-            # self.y_ph = tf.placeholder('int32', [None, self.data_dim[1]], name='y')
+            # 配置placeholder
             self.x_ph = tf.placeholder('int32', [None, None], name='x')
             self.y_ph = tf.placeholder('int32', [None, None], name='y')
-            self.keep_prob_ph = tf.placeholder('float32', name='keep_prob')
-            self.layer_output, self.seq_len, self.transition_score_matrix = model_ner.bilstm_crf(
+            self.seq_len_max_ph = tf.placeholder('int32', name='seq_len_max')
+            # 构建模型
+            self.layer_output, self.seq_len, self.transition_score_matrix = nn_model.bilstm_crf(
                 self.x_ph, self.keep_prob_ph,
                 self.dim_rnn, self.label_num, self.seq_len_max_ph,
                 self.word_embd_pretrain, self.vocab_num,
                 self.word_embd_dim
             )
         elif self.model_type == 'seq2seq':
+            # 配置placeholder
             self.x_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x')
             self.y_ph = tf.placeholder('int32', [None, self.data_dim[3]], name='y')
-            self.keep_prob_ph = tf.placeholder('float32', name='keep_prob')
             self.batch_size_ph = tf.placeholder('int32', name='batch_size')
             self.x_extended_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x_extended')
             self.y_extended_ph = tf.placeholder('int32', [None, self.data_dim[3]], name='y_extended')
             self.vocab_size_extend_ph = tf.placeholder('int32', name='vocab_size_extend')
-            self.encoder, self.decoder = model_seq2seq.seq2seq(
+            # 构建模型
+            self.encoder, self.decoder = nn_model.seq2seq(
                 self.x_ph, self.y_ph, self.keep_prob_ph, self.train_or_infer_ph, self.batch_size_ph,
                 self.x_extended_ph, self.y_extended_ph, self.vocab_size_extend_ph,
                 self.word_embd_dim, self.dim_rnn, self.use_same_word_embd,
@@ -663,8 +656,10 @@ class NeuralNetwork(object):
                 self.target_seq_len_max)
             self.layer_output = self.encoder + self.decoder
         elif self.model_type == 'fm':
+            # 配置placeholder
             self.x_ph = tf.placeholder('float32', [None, self.data_dim[0]], name='x')
             self.y_ph = tf.placeholder('float32', [None, self.data_dim[1]], name='y')
+            # 构建模型
             self.layer_output = nn_model.fm(self.x_ph, self.data_dim[0], self.data_dim[1], self.dim_lv)
         else:
             print('model_type error!')

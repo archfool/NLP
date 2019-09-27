@@ -29,7 +29,7 @@ def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
         encoder_seq_len = tf.cast(tf.reduce_sum(tf.sign(encoder[0]), axis=1), tf.int32)
         # encoder[1] [batch_size, source_seq_max_len, word_embd_dim]：对源序列数据进行embedding
         encoder_word_embd, encoder_vocab_size, word_embd_dim \
-            = creat_word_embd(encoder_word_embd_pretrain, encoder_vocab_size, word_embd_dim, name='encoder_word_embd')
+            = creat_word_embd(encoder_word_embd_pretrain, encoder_vocab_size, word_embd_dim, name='encoder_word_embd_matrix')
         encoder_w2v = tf.nn.embedding_lookup(encoder_word_embd, encoder[0])
         encoder.append(encoder_w2v)
         # encoder[2] ([batch_size,source_seq_max_len,dim_rnn*2], state_shape):构建encoder模型，并使用dynamic_rnn方法
@@ -64,7 +64,7 @@ def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
             decoder_vocab_size = encoder_vocab_size
         else:
             decoder_word_embd, decoder_vocab_size, word_embd_dim \
-                = creat_word_embd(decoder_word_embd_pretrain, decoder_vocab_size, word_embd_dim, name='decoder_word_embd')
+                = creat_word_embd(decoder_word_embd_pretrain, decoder_vocab_size, word_embd_dim, name='decoder_word_embd_matrix')
         decoder_w2v = tf.nn.embedding_lookup(decoder_word_embd, decoder[0])
         decoder.append(decoder_w2v)
         # decoder[2] 构建decoder模型
@@ -131,11 +131,12 @@ def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
                                        in zip(p_gens, vocab_dist_extendeds, attention_dist_extendeds)]
 
         decoder.append(final_distributions)
+    # todo 引入非线性
     return encoder, decoder
 
 
 # built word embedding
-def creat_word_embd(word_embd_pretrain=None, vocab_size=None, word_embd_dim=None, name='word_embd'):
+def creat_word_embd(word_embd_pretrain=None, vocab_size=None, word_embd_dim=None, name='word_embd_matrix'):
     # word_embd:[batch_size,step_len,embd_dim]
     if word_embd_pretrain is not None:
         word_embd = tf.get_variable(name=name, trainable=True, initializer=word_embd_pretrain)

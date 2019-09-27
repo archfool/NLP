@@ -22,6 +22,7 @@ logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] %(message)s", d
 
 # 修改当前工作目录
 os.chdir(u'E:\\MachineLearning\\nlp')
+path_data = u'..\\data\\'
 print(os.getcwd())
 from neural_network import NeuralNetwork
 import nn_lib
@@ -39,7 +40,6 @@ batch_size = 512
 max_seq_len = 30
 keep_prob = 0.95
 
-path_data = u'.\\data\\'
 path_seq2seq = path_data + u'seq2seq_qa\\'
 path_corpus = path_data + u'seq2seq_qa\\corpus\\'
 path_corpus_processed = path_data + u'seq2seq_qa\\corpus_processed\\'

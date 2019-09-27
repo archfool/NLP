@@ -24,6 +24,7 @@ from sklearn.model_selection import train_test_split
 # todo change dir
 os.chdir(u'E:\\MachineLearning\\nlp')
 # os.chdir(u'D:\\nlp')
+path_data = u'..\\data\\'
 print(os.getcwd())
 from neural_network import NeuralNetwork
 import nn_lib
@@ -34,7 +35,7 @@ flag_process_data = False
 flag_train = True
 flag_test = True
 flag_output_para = False
-flag_transfer_learning =True
+flag_transfer_learning =False
 flag_built_in_test = True
 
 # 超参数
@@ -44,7 +45,6 @@ learning_rate = 1e-3
 batch_size = 2048
 keep_prob = 0.8
 
-path_data = u'.\\data\\'
 path_ner = path_data + u'ner\\'
 path_corpus_processed = path_data + u'ner\\corpus_processed\\'
 processed_corpus_names = ['x_train', 'x_test', 'x_vali',
