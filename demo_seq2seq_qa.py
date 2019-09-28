@@ -153,9 +153,8 @@ if __name__ == "__main__":
     corpus = load_processed_corpus()
     data = [corpus['x_train'], corpus['x_extended_train'], corpus['vocab_extend_train'], corpus['y_train'], corpus['y_extended_train']]
     data_test = [corpus['x_test'], corpus['x_extended_test'], corpus['vocab_extend_test'], corpus['y_test'], corpus['y_extended_test']]
-    model = NeuralNetwork(data=data, task_type='seq_generation',
+    model = NeuralNetwork(data=data,
                           model_type='seq2seq', loss_fun_type='cross_entropy_seq2seq',
-                          eval_score_type='cross_entropy_seq2seq', optimizer_type='Adam',
                           model_parameter={'keep_prob': keep_prob,
                                            'word_embd_dim': word_embd_dim,
                                            'dim_rnn': dim_rnn,
@@ -164,15 +163,18 @@ if __name__ == "__main__":
                                            'encoder_vocab_size': vocab_size,
                                            'target_seq_len_max': max_seq_len,
                                            'batch_size': batch_size},
-                          hyper_parameter={'learning_rate': learning_rate,
-                                           'built_in_test_rounds': 3,
-                                           'early_stop_rounds': 150},
+                          hyper_parameter={'optimizer_type': 'Adam',
+                                           'learning_rate': learning_rate,
+                                           'eval_score_type': 'cross_entropy_seq2seq',
+                                           'early_stop_rounds_train': 100,
+                                           'built_in_test_interval': 1,
+                                           'early_stop_rounds_test': 10},
                           other_parameter={'model_save_rounds': 20,
                                            'path_data': path_seq2seq}
                           )
     # 训练
     if True:
-        model.train(transfer_learning=True, built_in_test=False, data_test=data_test)
+        model.train(transfer_learning=True, built_in_test=True, data_test=data_test)
 
     print('Task End.')
 

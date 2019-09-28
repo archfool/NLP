@@ -172,9 +172,8 @@ if __name__ == '__main__':
     corpus = load_processed_corpus()
     data = [corpus['x_train'], corpus['y_train']]
     data_test = [corpus['x_test'], corpus['y_test']]
-    model = NeuralNetwork(data=data, task_type='classification',
+    model = NeuralNetwork(data=data,
                           model_type='bilstm_crf', loss_fun_type='bilstm_crf',
-                          eval_score_type='bilstm_crf_loss', optimizer_type='Adam',
                           model_parameter={'word_embd_pretrain': None,
                                            'keep_prob': keep_prob,
                                            'vocab_num': vocab_size,
@@ -182,10 +181,12 @@ if __name__ == '__main__':
                                            'label_num': len(label2id),
                                            'dim_rnn': dim_rnn,
                                            'batch_size': batch_size},
-                          hyper_parameter={'learning_rate': learning_rate,
-                                           'early_stop_rounds': 150,
-                                           'built_in_test_rounds': 5,
-                                           'early_stop_rounds_built_in_test': 20},
+                          hyper_parameter={'optimizer_type': 'Adam',
+                                           'learning_rate': learning_rate,
+                                           'eval_score_type': 'bilstm_crf_loss',
+                                           'early_stop_rounds_train': 100,
+                                           'built_in_test_interval': 1,
+                                           'early_stop_rounds_test': 20},
                           other_parameter={'model_save_rounds': 50,
                                            'path_data': path_ner}
                           )

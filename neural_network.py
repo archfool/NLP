@@ -32,44 +32,58 @@ class NeuralNetwork(object):
     '''========================================================================='''
     '''===============================init part================================='''
     '''========================================================================='''
-    def __init__(self, data, task_type=None,
-                 model_type=None, model_parameter=None, hyper_parameter=None,
-                 loss_fun_type=None, optimizer_type='Adam', eval_score_type=None,
+    def __init__(self, data, model_type, loss_fun_type,
+                 model_parameter=None,
+                 hyper_parameter=None,
                  other_parameter=None):
+        """none"""
+        '''======Part 1: 配置任务模型基础信息======'''
         # 规整样本特征值x和预测值y
         self.data = self.init_data(data)
-        # 配置任务类型：回归，分类,文本生成，等
-        if self.init_task_type(task_type) is None:
+        # 配置模型类型
+        self.model_type = model_type
+        # 配置损失函数类型
+        self.loss_fun_type = loss_fun_type
+        '''======Part 2: 记录模型参数和超参数======'''
+        # 记录模型参数
+        if not isinstance(model_parameter, dict):
+            print('model_parameter is not dict type!!!')
             return
-        # 初始化模型参数
-        self.init_model_para(model_type, model_parameter)
-        # 配置目标函数类型
-        if self.init_loss_fun_type(loss_fun_type) is None:
+        self.model_parameter = model_parameter
+        # 记录超参数
+        if not isinstance(hyper_parameter, dict):
+            print('hyper_parameter is not dict type!!!')
             return
-        # 配置评估函数的类型
-        if self.init_eval_score(eval_score_type, hyper_parameter=hyper_parameter) is None:
+        self.hyper_parameter = hyper_parameter
+        '''======Part 3: 其它初始化内容======'''
+        # 配置评估函数参数
+        if self.init_eval_fun(hyper_parameter=self.hyper_parameter) is None:
             return
-        # 初始化优化器
-        self.init_optimizer(optimizer_type, hyper_parameter)
         # 初始化其它参数
-        if self.init_other_para(other_parameter=other_parameter) is None:
+        # 检测model_parameter参数是否为字典
+        if not isinstance(other_parameter, dict):
+            print('other_parameter is not dict type!!!')
             return
+        # 配置存储数据的路径
+        self.path_data = other_parameter.get('path_data', '')
+        # 配置存储数据的周期
+        self.model_save_rounds = other_parameter.get('model_save_rounds', 100)
+        # if (other_parameter is not None) and (isinstance(other_parameter, dict)):
+        #     for key, value in other_parameter:
+        #         exec('self.{}={}'.format(key, value))
 
     # 读取并规整样本数据
     def init_data(self, data):
         if data is None:
             return None
-
         # 如果data不是一个列表（即为单个数据），将它放入列表里
         if not isinstance(data, list):
             data = [data]
-
         # 若数据维度列表还未被初始化（即第一次初始化数据），则构建空列表
         try:
             self.data_dim[0]
         except:
             self.data_dim = []
-
         # 遍历data列表，处理数据
         data_processed = []
         for i, d in enumerate(data):
@@ -94,49 +108,17 @@ class NeuralNetwork(object):
         return data_processed
 
 
-    # 配置任务的类型：回归，二分类、多分类等等
-    def init_task_type(self, task_type):
-        if task_type in ['regression',
-                         'classification',
-                         'seq_generation']:
-            self.task_type = task_type
-            return self.task_type
-        else:
-            print('task_type error!')
-            return None
-    
-    # 初始化其它参数
-    def init_other_para(self, other_parameter):
-        # 检测model_parameter参数是否为字典
-        if not isinstance(other_parameter, dict):
-            print('other_parameter is not dict type!!!')
-            return
-        # 配置存储数据的路径
-        self.path_data = other_parameter.get('path_data', '')
-        # 配置存储数据的周期
-        self.model_save_rounds = other_parameter.get('model_save_rounds', 100)
-        # 配置训练的epoch数
-        self.epoch = other_parameter.get('epoch', 10000)
-        return True
-
     '''========================================================================='''
     '''===============================train part================================'''
     '''========================================================================='''
-    # 训练
+    # 训练模块
     def train(self, data=None, transfer_learning=False,
-              built_in_test=False, data_test=None,
-              other_parameter=None):
-        # 读取样本特征值
+              built_in_test=False, data_test=None):
+        # 读取训练集样本
         data = self.init_data(data)
         if data is None:
             data = self.data
         batch_sum = data[0].shape[0]
-
-        # 配置参数
-        self.built_in_test = built_in_test
-        if (other_parameter is not None) and (isinstance(other_parameter, dict)):
-            for key, value in other_parameter:
-                exec('self.{}={}'.format(key, value))
 
         # 重置tf张量空间
         tf.reset_default_graph()
@@ -147,20 +129,18 @@ class NeuralNetwork(object):
         # 构建损失函数
         loss = self.loss_fun(self.model_out)
         
-        # 优化器
-        optimize_step = self.optimizer(loss)
+        # 创建优化器
+        optimize_step = self.build_optimizer(loss)
         
         # 评估函数
-        score = self.cal_score(y_true=self.y_ph, y_predict=self.model_out, score_type=self.eval_score_type)
+        score_train = self.cal_eval_score(y_true=self.y_ph, y_infer=self.model_out, score_type=self.eval_score_type)
 
         # 初始化内置验证集评估模块
-        self.early_stop_flag_built_in_test = False
+        self.built_in_test = built_in_test
         if built_in_test is True:
             data_test = self.init_data(data_test)
             feed_dict_test = self.get_feed_dict(data=data_test, train_or_infer='infer')
-            built_in_test_cal = self.cal_score(y_true=self.y_ph, y_predict=self.model_out, score_type=self.eval_score_type)
-            # self.built_in_test_stop_score_list = []
-            self.early_stop_score_list_built_in_test = []
+            score_test = self.cal_eval_score(y_true=self.y_ph, y_infer=self.model_out, score_type=self.eval_score_type)
 
         # 初始化模型存取器
         saver = tf.train.Saver(max_to_keep=10)
@@ -169,7 +149,7 @@ class NeuralNetwork(object):
         
         # 开始训练模型
         with tf.Session() as sess:
-            # 判断是否进行迁移学习：是新建模型，还是读取已有的模型配置
+            # 判断是否进行迁移学习
             if transfer_learning is True:
                 try:
                     # 读取之前训练的模型参数
@@ -188,7 +168,7 @@ class NeuralNetwork(object):
                 # 初始化step计数器
                 self.step = 0
             # 外循环，所有样本循环若干次
-            for i in range(self.epoch):
+            for i in range(self.hyper_parameter.get('epoch', 10000)):
                 # todo shuffle
                 # 将数据随机打乱
                 # x = tf.random_shuffle(tf.concat((x, y), axis=1))
@@ -196,10 +176,23 @@ class NeuralNetwork(object):
                 # 内循环，每次选取批量的样本进行迭代
                 for step in range(batch_sum//self.batch_size):
                     self.step = self.step+1
+                    # 提取批数据
                     data_batch_concat = data_concat[step*self.batch_size: (step+1)*self.batch_size]
                     data_batch = [data_batch_concat[:, sum(self.data_dim[:i]):sum(self.data_dim[:i+1])] for i in range(len(self.data_dim))]
                     feed_dict = self.get_feed_dict(data=data_batch, train_or_infer='train')
-                    _, loss_value, score_value = sess.run([optimize_step, loss, score], feed_dict=feed_dict)
+                    # 训练一次
+                    # _, loss_value, score_value_train = sess.run([optimize_step, loss, score_train], feed_dict=feed_dict)
+                    sess.run(optimize_step, feed_dict=feed_dict)
+                    # 评估训练集效果
+                    score_value_train = sess.run(score_train, feed_dict=feed_dict)
+                    # 每次迭代输出一次训练集评估得分
+                    print('step', self.step, self.eval_score_type, score_value_train)
+                    # 训练集early_stop判断
+                    self.early_stop_flag_train, self.early_stop_scores_train = \
+                        self.early_stop_judge(score_value_train, self.early_stop_scores_train, self.early_stop_rounds_train)
+                    if self.early_stop_flag_train:
+                        print('good model!')
+                        break
                     if False:
                         tmp = []
                         y_true = self.y_extended_ph[:, 1:]
@@ -224,39 +217,51 @@ class NeuralNetwork(object):
                         observer, tmp1 = sess.run([self.layer_output, tmp], feed_dict=feed_dict)
                         tmp2 = np.concatenate([np.reshape(np.argmax(logit, axis=1), [-1,1]) for logit in observer[-1]], axis=1)
                         print('1')
-                    # 每次迭代输出一次评估得分
-                    print('step', self.step, self.eval_score_type, score_value)
-                    # early_stop判断
-                    self.early_stop_flag, self.early_stop_score_list = \
-                        self.early_stop_judge(score_value, self.early_stop_score_list, self.early_stop_rounds)
-                    if self.early_stop_flag:
-                        print('good model!')
-                        break
                     # 周期性存储模型参数，并进行验证集验证
                     if self.step % self.model_save_rounds == 0:
                         saver.save(sess, self.path_data+u'model_save\\mnist.ckpt', global_step=self.step)
                         gc.collect()
                     # 内置验证集校验
-                    if (built_in_test is True) and ((self.step % self.built_in_test_rounds) == 0):
-                        built_in_test_score = sess.run(built_in_test_cal, feed_dict=feed_dict_test)
-                        print('====== built_in_test', self.eval_score_type, built_in_test_score, ' ======')
-                        self.early_stop_flag_built_in_test, self.early_stop_score_list_built_in_test = \
-                            self.early_stop_judge(built_in_test_score, self.early_stop_score_list_built_in_test, self.early_stop_rounds_built_in_test)
-                        # self.built_in_test_stop_judge(built_in_test_score)
-                        if self.early_stop_flag_built_in_test:
+                    if (built_in_test is True) and ((self.step % self.built_in_test_interval) == 0):
+                        # 评估测试集效果
+                        score_value_test = sess.run(score_test, feed_dict=feed_dict_test)
+                        # 每次迭代输出一次测试集评估得分
+                        print('====== built_in_test', self.eval_score_type, score_value_test, ' ======')
+                        # 测试集early_stop判断
+                        self.early_stop_flag_test, self.early_stop_scores_test = \
+                            self.early_stop_judge(score_value_test, self.early_stop_scores_test, self.early_stop_rounds_test)
+                        if self.early_stop_flag_test:
                             print('good model!')
                             break
-                if self.early_stop_flag or self.early_stop_flag_built_in_test:
+                if self.early_stop_flag_train or self.early_stop_flag_test:
                     print('good model!')
                     break
             saver.save(sess, self.path_data+u'model_save\\mnist.ckpt', global_step=self.step)
             print('Train model end!')
         return
     
+    # 优化器
+    def build_optimizer(self, loss):
+        self.optimizer_type = self.hyper_parameter.get('optimizer_type')
+        if self.optimizer_type == 'Adam':
+            self.learning_rate = self.hyper_parameter.get('learning_rate', 0.0001)
+            optimize_step = tf.train.AdamOptimizer(self.learning_rate).minimize(loss)
+        # 用于稀疏矩阵
+        elif self.optimizer_type == 'Ftrl':
+            self.learning_rate = self.hyper_parameter.get('learning_rate', 0.001)
+            self.l1_regularization = self.hyper_parameter.get('l1_regularization', 0.0001)
+            self.l2_regularization = self.hyper_parameter.get('l2_regularization', 0.0)
+            optimizer = tf.train.FtrlOptimizer(self.learning_rate, l1_regularization_strength=self.l1_regularization,
+                                               l2_regularization_strength=self.l2_regularization)
+            optimize_step = optimizer.minimize(loss)
+        else:
+            optimize_step = tf.train.AdamOptimizer(self.learning_rate).minimize(loss)
+        return optimize_step
+
     '''========================================================================='''
     '''==============================predict part==============================='''
     '''========================================================================='''
-    # 预测
+    # 预测模块
     def infer(self, data):
         # 规整特征数据
         data = self.init_data(data)
@@ -299,28 +304,16 @@ class NeuralNetwork(object):
     '''========================================================================'''
     '''=============================evaluate part=============================='''
     '''========================================================================'''
-    # 配置损失函数类型
-    def init_loss_fun_type(self, loss_fun_type=None):
-        if not loss_fun_type:
-            if self.task_type == 'regression':
-                self.loss_fun_type = 'mse'
-            elif self.task_type == 'classification':
-                self.loss_fun_type = 'cross_entropy'
-            elif self.task_type == 'seq_generation':
-                self.loss_fun_type = 'cross_entropy_seq2seq'
-        else:
-            self.loss_fun_type = loss_fun_type
-        return self.loss_fun_type
-
     # 损失函数
-    def loss_fun(self, model_out):
+    def loss_fun(self, y_infer):
         y_true = self.y_ph
         if self.loss_fun_type == 'mse':
-            loss = tf.reduce_mean(tf.square(tf.subtract(model_out, y_true)))
+            loss = tf.reduce_mean(tf.square(tf.subtract(y_true, y_infer)))
         elif self.loss_fun_type == 'mae':
-            loss = tf.reduce_mean(tf.abs(tf.subtract(model_out, y_true)))
+            loss = tf.reduce_mean(tf.abs(tf.subtract(y_true, y_infer)))
         elif self.loss_fun_type == 'cross_entropy':
-            loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=model_out, labels=y_true))
+            # todo
+            loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=y_infer, labels=y_true))
         elif self.loss_fun_type == 'cross_entropy_seq2seq':
             # 目标序列真实值
             y_true = self.y_extended_ph[:, 1:]
@@ -332,13 +325,11 @@ class NeuralNetwork(object):
             y_true_list = [tf.reshape(y_true[:, step_num], [-1, 1]) for step_num in range(y_true.shape[1])]
             y_true_index = [tf.stack((index_batch_num, y_true_step), axis=2) for y_true_step in y_true_list]
             # 目标序列真实值的概率
-            target_probs = [tf.gather_nd(logit, index) for (logit, index) in zip(model_out, y_true_index)]
+            target_probs = [tf.gather_nd(logit, index) for (logit, index) in zip(y_infer, y_true_index)]
             # 取对数，加掩码，归一化
             loss_log = -tf.log(target_probs)
             loss_log_masked = tf.concat(loss_log, axis=1) * y_seq_mask
             loss = tf.reduce_sum(loss_log_masked)/tf.reduce_sum(y_seq_mask)
-            # 全局变量，传递给score用
-            self.loss = loss
         elif self.loss_fun_type == 'bilstm_crf':
             log_likelihood, self.transition_score_matrix =\
                 nn_lib.crf_log_likelihood(inputs=self.layer_output[-1],
@@ -346,37 +337,31 @@ class NeuralNetwork(object):
                                           sequence_lengths=self.seq_len,
                                           transition_params=self.transition_score_matrix)
             loss = -tf.reduce_mean(log_likelihood)
-            # 全局变量，传递给score用
-            self.loss = loss
         else:
             loss = None
         return loss
     
     # 配置评估函数的类型和评估监控器
-    def init_eval_score(self, eval_score_type, hyper_parameter=None):
+    def init_eval_fun(self, hyper_parameter=None):
         # 检测hyper_parameter参数是否为字典
         if not isinstance(hyper_parameter, dict):
             print('hyper_parameter is not dict type!!!')
             return None
-        if eval_score_type is None:
-            if self.task_type == 'regression':
-                self.eval_score_type = 'mse'
-            elif self.task_type == 'classification':
-                if self.data_dim[1] == 2:
-                    self.eval_score_type = 'f1_score'
-            elif self.task_type == 'seq_generation':
-                self.eval_score_type = 'cross_entropy_seq2seq'
-        else:
-            self.eval_score_type = eval_score_type
-        self.built_in_test_rounds = hyper_parameter.get('built_in_test_rounds', 20)
-        self.early_stop_rounds = hyper_parameter.get('early_stop_rounds', None)
-        self.early_stop_rounds_built_in_test = hyper_parameter.get('early_stop_rounds_built_in_test', None)
-        self.early_stop_score_list = []
-        self.early_stop_flag = False
+        # 评估函数类型
+        self.eval_score_type = hyper_parameter.get('eval_score_type', None)
+        # 训练集评估函数参数
+        self.early_stop_rounds_train = hyper_parameter.get('early_stop_rounds_train', None)
+        self.early_stop_flag_train = False
+        self.early_stop_scores_train = []
+        # 测试集评估函数参数
+        self.built_in_test_interval = hyper_parameter.get('built_in_test_interval', 20)
+        self.early_stop_rounds_test = hyper_parameter.get('early_stop_rounds_test', None)
+        self.early_stop_flag_test = False
+        self.early_stop_scores_test = []
         return self.eval_score_type
     
     # 评估模型
-    def cal_score(self, y_true, y_predict, score_type=None):
+    def cal_eval_score(self, y_true, y_infer, score_type=None):
         # 确认度量方式
         if not score_type:
             score_type = self.eval_score_type
@@ -384,34 +369,34 @@ class NeuralNetwork(object):
         if score_type in ['precision', 'recall', 'accuracy', 'f1_score']:
             # 若任务是2分类问题，则需要将2维的onehot形式预测值转换为1维
             y_true = tf.cast(tf.argmax(y_true, axis=1), tf.int32)
-            y_predict = tf.cast(tf.argmax(y_predict, axis=1), tf.int32)
-            
+            y_infer = tf.cast(tf.argmax(y_infer, axis=1), tf.int32)
+            # 构造true矩阵和false矩阵
             ones = tf.ones_like(y_true)
             zeros = tf.zeros_like(y_true)
-
+            # 计算TP/TN/FP/FN
             tp = tf.reduce_sum(
                 tf.cast(
                     tf.logical_and(
                         tf.equal(y_true, ones),
-                        tf.equal(y_predict, ones)),
+                        tf.equal(y_infer, ones)),
                     tf.float32))
             tn = tf.reduce_sum(
                     tf.cast(
                         tf.logical_and(
                             tf.equal(y_true, zeros),
-                            tf.equal(y_predict, zeros)),
+                            tf.equal(y_infer, zeros)),
                         tf.float32))
             fp = tf.reduce_sum(
                     tf.cast(
                         tf.logical_and(
                             tf.equal(y_true, zeros),
-                            tf.equal(y_predict, ones)),
+                            tf.equal(y_infer, ones)),
                         tf.float32))
             fn = tf.reduce_sum(
                     tf.cast(
                         tf.logical_and(
                             tf.equal(y_true, ones),
-                            tf.equal(y_predict, zeros)),
+                            tf.equal(y_infer, zeros)),
                         tf.float32))
             if score_type == 'precision':
                 precision = tp/(tp+fp)
@@ -430,30 +415,22 @@ class NeuralNetwork(object):
             else:
                 print('score_type error!')
                 return
+        elif score_type in ['cross_entropy', 'cross_entropy_seq2seq', 'bilstm_crf_loss']:
+            return self.loss_fun(y_infer)
         else:
             if score_type == 'mse':
-                return tf.reduce_mean(tf.square(tf.subtract(y_true, y_predict)))
+                return tf.reduce_mean(tf.square(tf.subtract(y_true, y_infer)))
             elif score_type == 'mae':
-                return tf.reduce_mean(tf.abs(tf.subtract(y_true, y_predict)))
-            elif score_type == 'bilstm_crf_loss':
-                # todo
-                # 全局变量self.loss会导致built_in_test和train的score想混淆？？？！！！
-                return self.loss
-            elif score_type == 'cross_entropy_seq2seq':
-                # todo
-                return self.loss
-            else:
-                print('score_type error!')
-                return
-    
+                return tf.reduce_mean(tf.abs(tf.subtract(y_true, y_infer)))
+
     # early_stop判定
-    def early_stop_judge(self, new_score, early_stop_score_list, early_stop_rounds):
+    def early_stop_judge(self, new_score, early_stop_scores, early_stop_rounds):
         early_stop_flag = False
         # 判断是否使用early_stop
         if early_stop_rounds is None:
             return False, None
         # 判断评估函数值是大点好，还是小点好
-        if self.eval_score_type in ['mse', 'mae', 'bilstm_crf_loss', 'cross_entropy_seq2seq']:
+        if self.eval_score_type in ['mse', 'mae', 'bilstm_crf_loss', 'cross_entropy', 'cross_entropy_seq2seq']:
             minimize = True
         elif self.eval_score_type in ['f1_score', 'precision', 'recall', 'accuracy']:
             minimize = False
@@ -461,165 +438,63 @@ class NeuralNetwork(object):
             minimize = True
             print('eval_score_type error!')
         # 判断early_stop
-        if len(early_stop_score_list) < early_stop_rounds:
-            early_stop_score_list = early_stop_score_list + [new_score]
+        if len(early_stop_scores) < early_stop_rounds:
+            early_stop_scores = early_stop_scores + [new_score]
         else:
             if early_stop_rounds > 10:
                 n_tmp = 5
-                ths = (sum(sorted(early_stop_score_list[-n_tmp-1:])[1:n_tmp])+new_score)/n_tmp
+                ths = (sum(sorted(early_stop_scores[-n_tmp-1:])[1:n_tmp])+new_score)/n_tmp
             else:
                 ths = new_score
             if minimize is True:
-                early_stop_flag = ([x for x in early_stop_score_list if x > ths] == [])
+                early_stop_flag = ([x for x in early_stop_scores if x > ths] == [])
             else:
-                early_stop_flag = ([x for x in early_stop_score_list if x < ths] == [])
-            early_stop_score_list = early_stop_score_list + [new_score]
-            early_stop_score_list = early_stop_score_list[-early_stop_rounds:]
-        return early_stop_flag, early_stop_score_list
-    
-#     # built_in_test_stop判定
-#     def built_in_test_stop_judge(self, built_in_test_score):
-#         # 判断是否使用built_in_test_stop
-#         if self.built_in_test is False:
-#             self.built_in_test_stop_flag = False
-#             return
-#         if self.early_stop_rounds is None:
-#             return
-#         # 判断评估函数值是大点好，还是小点好
-#         if self.eval_score_type in ['mse', 'mae', 'bilstm_crf_loss', 'cross_entropy_seq2seq']:
-#             minimize = True
-#         elif self.eval_score_type in ['f1_score', 'precision', 'recall', 'accuracy']:
-#             minimize = False
-#         else:
-#             print('eval_score_type error!')
-#             return
-#         # 判断built_in_test_stop
-#         stop_lst_len = 3
-#         compared_stop_lst_len = 50
-#         compared_score_list = self.early_stop_score_list[-compared_stop_lst_len:]
-# #         compared_score = sum(compared_score_list)*1.0/len(compared_score_list)
-#         if len(self.built_in_test_stop_score_list) < stop_lst_len:
-#             self.built_in_test_stop_score_list = self.built_in_test_stop_score_list + [built_in_test_score]
-#         else:
-#             self.built_in_test_stop_score_list = self.built_in_test_stop_score_list + [built_in_test_score]
-#             self.built_in_test_stop_score_list = self.built_in_test_stop_score_list[-stop_lst_len:]
-#             if minimize is True:
-#                 ths = min(self.built_in_test_stop_score_list)
-#                 compared_score = max(compared_score_list)
-#                 self.built_in_test_stop_flag = (compared_score < ths)
-#             else:
-#                 ths = max(self.built_in_test_stop_score_list)
-#                 compared_score = min(compared_score_list)
-#                 self.built_in_test_stop_flag = (compared_score > ths)
-#         return
-    
-    # 初始化优化器
-    def init_optimizer(self, optimizer_type, hyper_parameter):
-        # 检测hyper_parameter参数是否为字典
-        if not isinstance(hyper_parameter, dict):
-            print('hyper_parameter is not dict type!!!')
-            return
-        self.optimizer_type = optimizer_type
-        if self.optimizer_type == 'Adam':
-            self.learning_rate = hyper_parameter.get('learning_rate', 0.0001)
-        # 用于稀疏矩阵
-        elif self.optimizer_type == 'Ftrl':
-            self.learning_rate = hyper_parameter.get('learning_rate', 0.001)
-            self.l1_regularization = hyper_parameter.get('l1_regularization', 0.0001)
-            self.l2_regularization = hyper_parameter.get('l2_regularization', 0.0)
-    
-    # 优化器
-    def optimizer(self, loss):
-        if self.optimizer_type == 'Adam':
-            optimize_step = tf.train.AdamOptimizer(self.learning_rate).minimize(loss)
-        # 用于稀疏矩阵
-        elif self.optimizer_type == 'Ftrl':
-            optimizer = tf.train.FtrlOptimizer(self.learning_rate, l1_regularization_strength=self.l1_regularization,
-                                               l2_regularization_strength=self.l2_regularization)
-            optimize_step = optimizer.minimize(loss)
-        else:
-            optimize_step = tf.train.AdamOptimizer(self.learning_rate).minimize(loss)
-        return optimize_step
-    
+                early_stop_flag = ([x for x in early_stop_scores if x < ths] == [])
+            early_stop_scores = early_stop_scores + [new_score]
+            early_stop_scores = early_stop_scores[-early_stop_rounds:]
+        return early_stop_flag, early_stop_scores
+
     '''========================================================================'''
     '''===============================model part==============================='''
     '''========================================================================'''
-    # 初始化模型参数
-    def init_model_para(self, model_type, model_parameter):
-        # todo move to creat_model
-        # 检测model_parameter参数是否为字典
-        if not isinstance(model_parameter, dict):
-            print('model_parameter is not dict type!!!')
-            return
-        # 配置模型类型
-        self.model_type = model_type
-
+    # 构建模型
+    def creat_model(self):
+        # 记录各层神经网络的输出
+        self.layer_output = []
         # 配置批处理样本个数
-        self.batch_size = model_parameter.get('batch_size', 1024)
+        self.batch_size = self.model_parameter.get('batch_size', 1024)
         # 获取keep_prob参数
-        self.keep_prob = model_parameter.get('keep_prob', [1.0])
+        self.keep_prob = self.model_parameter.get('keep_prob', [1.0])
+        # 确定模型当前处于训练模式还是预测模式
+        self.train_or_infer_ph = tf.placeholder(tf.string, name='train_or_infer')
+        # keep_probability
+        self.keep_prob_ph = tf.placeholder('float32', name='keep_prob')
 
-        # 根据模型类型，初始化模型参数
-        if self.model_type == 'test':
-            pass
-        elif self.model_type == 'mlp':
+        if self.model_type == 'mlp':
             # 修正keep_prob格式
             if isinstance(self.keep_prob, float):
                 self.keep_prob = [self.keep_prob]
             # 获取每层网络的神经元个数
-            self.dim = [self.data_dim[0]]+list(model_parameter.get('dim', []))+[self.data_dim[1]]
+            self.dim = [self.data_dim[0]]+list(self.model_parameter.get('dim', []))+[self.data_dim[1]]
             # 获取神经网络层数
             self.layer_num = len(self.dim)-1
             # 获取激活函数
-            self.activation_fun = list(model_parameter.get('activation_fun', [tf.nn.relu]))
+            self.activation_fun = list(self.model_parameter.get('activation_fun', [tf.nn.relu]))
             if len(self.activation_fun) == 1:
                 self.activation_fun = self.activation_fun*(self.layer_num-1)+[None]
             else:
                 self.activation_fun[-1] = None
-        elif self.model_type == 'rnn_nlp':
-            self.word2vec = model_parameter.get('word2vec')
-            self.dim_rnn = model_parameter.get('dim_rnn', 128)
-            self.layer_num = 1
-        elif self.model_type == 'bilstm_crf':
-            self.word_embd_pretrain = model_parameter.get('word_embd_pretrain')
-            self.dim_rnn = model_parameter.get('dim_rnn', 200)
-            self.label_num = model_parameter.get('label_num', None)
-            self.vocab_num = model_parameter.get('vocab_num', None)
-            self.word_embd_dim = model_parameter.get('word_embd_dim', None)
-            self.layer_num = 1
-        elif self.model_type == 'seq2seq':
-            self.word_embd_dim = model_parameter.get('word_embd_dim', 300)
-            self.dim_rnn = model_parameter.get('dim_rnn', 300)
-            self.use_same_word_embd = model_parameter.get('use_same_word_embd', True)
-            self.encoder_word_embd_pretrain = model_parameter.get('encoder_word_embd_pretrain', None)
-            self.encoder_vocab_size = model_parameter.get('encoder_vocab_size', None)
-            self.decoder_word_embd_pretrain = model_parameter.get('decoder_word_embd_pretrain', None)
-            self.decoder_vocab_size = model_parameter.get('decoder_vocab_size', None)
-            self.target_seq_len_max = model_parameter.get('target_seq_len_max', 50)
-        elif self.model_type == 'fm':
-            # 确定隐层向量维度
-            self.dim_lv = model_parameter.get('lantent_vector_dim', self.data[0].shape[1])
-        else:
-            print('model_type error!')
-            return
-        # 记录各层神经网络的输出
-        self.layer_output = []
-    
-    # 构建模型
-    def creat_model(self):
-        # 确定模型当前处于训练模式还是预测模式
-        self.train_or_infer_ph = tf.placeholder(tf.string, name='train_or_infer')
-        # keep_probability
-        self.keep_prob_ph = tf.placeholder('float32', [self.layer_num], name='keep_prob')
-
-        if self.model_type == 'mlp':
             # 配置placeholder
             self.x_ph = tf.placeholder('float32', [None, self.data_dim[0]], name='x')
             self.y_ph = tf.placeholder('float32', [None, self.data_dim[1]], name='y')
+            self.keep_prob_ph = tf.placeholder('float32', [self.layer_num], name='keep_prob')
             # 构建模型
             self.layer_output = nn_model.mlp(self.x_ph, self.keep_prob_ph,
                                              self.activation_fun, self.layer_num, self.dim)
         elif self.model_type == 'rnn_nlp':
+            self.word2vec = self.model_parameter.get('word2vec')
+            self.dim_rnn = self.model_parameter.get('dim_rnn', 128)
+            self.layer_num = 1
             # 配置placeholder
             self.x_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x')
             self.y_ph = tf.placeholder('float32', [None, self.data_dim[1]], name='y')
@@ -627,6 +502,12 @@ class NeuralNetwork(object):
             self.layer_output = nn_model.rnn_nlp(self.x_ph, self.keep_prob_ph,
                                                  self.word2vec, self.dim_rnn, self.data_dim[1])
         elif self.model_type == 'bilstm_crf':
+            self.word_embd_pretrain = self.model_parameter.get('word_embd_pretrain')
+            self.dim_rnn = self.model_parameter.get('dim_rnn', 200)
+            self.label_num = self.model_parameter.get('label_num', None)
+            self.vocab_num = self.model_parameter.get('vocab_num', None)
+            self.word_embd_dim = self.model_parameter.get('word_embd_dim', None)
+            self.layer_num = 1
             # 配置placeholder
             self.x_ph = tf.placeholder('int32', [None, None], name='x')
             self.y_ph = tf.placeholder('int32', [None, None], name='y')
@@ -639,6 +520,14 @@ class NeuralNetwork(object):
                 self.word_embd_dim
             )
         elif self.model_type == 'seq2seq':
+            self.word_embd_dim = self.model_parameter.get('word_embd_dim', 300)
+            self.dim_rnn = self.model_parameter.get('dim_rnn', 300)
+            self.use_same_word_embd = self.model_parameter.get('use_same_word_embd', True)
+            self.encoder_word_embd_pretrain = self.model_parameter.get('encoder_word_embd_pretrain', None)
+            self.encoder_vocab_size = self.model_parameter.get('encoder_vocab_size', None)
+            self.decoder_word_embd_pretrain = self.model_parameter.get('decoder_word_embd_pretrain', None)
+            self.decoder_vocab_size = self.model_parameter.get('decoder_vocab_size', None)
+            self.target_seq_len_max = self.model_parameter.get('target_seq_len_max', 50)
             # 配置placeholder
             self.x_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x')
             self.y_ph = tf.placeholder('int32', [None, self.data_dim[3]], name='y')
@@ -656,6 +545,8 @@ class NeuralNetwork(object):
                 self.target_seq_len_max)
             self.layer_output = self.encoder + self.decoder
         elif self.model_type == 'fm':
+            # 确定隐层向量维度
+            self.dim_lv = self.model_parameter.get('lantent_vector_dim', self.data[0].shape[1])
             # 配置placeholder
             self.x_ph = tf.placeholder('float32', [None, self.data_dim[0]], name='x')
             self.y_ph = tf.placeholder('float32', [None, self.data_dim[1]], name='y')
@@ -670,7 +561,6 @@ class NeuralNetwork(object):
     # 获取feed参数
     def get_feed_dict(self, data, train_or_infer):
         feed_dict = {}
-
         # 1.标记当前模型是训练模式还是预测模式。2.配置keep_prob。
         if 'train' == train_or_infer:
             feed_dict[self.train_or_infer_ph] = 'train'
@@ -679,7 +569,6 @@ class NeuralNetwork(object):
             feed_dict[self.train_or_infer_ph] = 'infer'
             feed_dict[self.keep_prob_ph] = 1.0
 
-        # 根据模型是否有dropout层，以及模型用于预测还是训练，选择传入的keep_prob参数
         if self.model_type == 'test':
             pass
         elif self.model_type == 'mlp':
@@ -708,10 +597,6 @@ class NeuralNetwork(object):
                 feed_dict[self.y_ph] = data[3]
                 feed_dict[self.y_extended_ph] = data[4]
             except:
-                pass
-            if 'infer' == train_or_infer:
-                pass
-            else:
                 pass
         elif self.model_type == 'bilstm_crf':
             feed_dict[self.x_ph] = data[0]
@@ -749,46 +634,9 @@ class NeuralNetwork(object):
         return
    
 
-def demo_regression():
-    tf.reset_default_graph()
-    tf.global_variables()
-    
-    x = np.array([x for x in range(10000)]).reshape([-1, 1])
-    x = np.concatenate((x, x), axis=1)
-    std_x = StandardScaler()
-    x = std_x.fit_transform(x)
-    y = np.array([x for x in range(10000)]).reshape([-1, 1])
-    std_y = StandardScaler()
-    y = std_y.fit_transform(y)
-    y[2500:7500, 0] = 1-y[2500:7500, 0]
-    
-    model = NeuralNetwork(
-        x, y, task_type='regression',
-        model_type='mlp', model_parameter={'dim':[10]*3, 'keep_prob':[0.9], 'activation_fun':[tf.nn.relu]},
-        loss_fun_type='mse', eval_score_type='mse',
-        optimizer_type='Adam', hyper_parameter={'batch_size': 1024, 'learning_rate': 0.01},
-        path_data='')
-    model.train(epoch=1000)
-    out = model.infer(x)
-    
-    if False:
-        for var in tf.global_variables():
-            print(var)
-#             var_value=sess.run(var)
-#             print(var_value)
-    
-    return model, x, y, out
-    
-#     model=NeuralNetwork(x,y,dim=[5,5,5,2],batch_size=1024,keep_prob=1.0,\
-#                          activation_fun=tf.nn.relu,model_type='mlp')
-#     model.train()
-#     tmp=np.array([x*1000 for x in range(11)]).reshape([-1,1])
-#     out=model.predict(np.concatenate((tmp,tmp,tmp),axis=1))
-#     print(np.argmax(out,axis=1))
 
 
 if __name__ == '__main__':
-    # model, x, y, out = demo_regression()
     logging.warning('end')
 
 

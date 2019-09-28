@@ -43,7 +43,7 @@ flag_transfer_learning = False
 word_embd_dim = 200
 dim_rnn = word_embd_dim
 learning_rate = 1e-3
-batch_size = 128*2
+batch_size = 128*1
 keep_prob = 0.95
 
 path_seq2seq = path_data+u'seq2seq_nmt\\'
@@ -223,9 +223,8 @@ if __name__ == "__main__":
     corpus = load_processed_corpus()
     data = [corpus['x_train'], corpus['x_extended_train'], corpus['vocab_extend_train'], corpus['y_train'], corpus['y_extended_train']]
     data_test = [corpus['x_test'], corpus['x_extended_test'], corpus['vocab_extend_test'], corpus['y_test'], corpus['y_extended_test']]
-    model = NeuralNetwork(data=data, task_type='seq_generation',
+    model = NeuralNetwork(data=data,
                           model_type='seq2seq', loss_fun_type='cross_entropy_seq2seq',
-                          eval_score_type='cross_entropy_seq2seq', optimizer_type='Adam',
                           model_parameter={'keep_prob': keep_prob,
                                            'word_embd_dim': word_embd_dim,
                                            'dim_rnn': dim_rnn,
@@ -236,15 +235,18 @@ if __name__ == "__main__":
                                            'decoder_vocab_size': vocab_size_tgt,
                                            'target_seq_len_max': tgt_seq_len_max,
                                            'batch_size': batch_size},
-                          hyper_parameter={'learning_rate': learning_rate,
-                                           'built_in_test_rounds': 10,
-                                           'early_stop_rounds': 100},
+                          hyper_parameter={'optimizer_type': 'Adam',
+                                           'learning_rate': learning_rate,
+                                           'eval_score_type': 'cross_entropy_seq2seq',
+                                           'early_stop_rounds_train': 100,
+                                           'built_in_test_interval': 1,
+                                           'early_stop_rounds_test': 10},
                           other_parameter={'model_save_rounds': 10,
                                            'path_data': path_seq2seq}
                           )
     # 训练
     if flag_train:
-        model.train(transfer_learning=flag_transfer_learning, built_in_test=False, data_test=data_test)
+        model.train(transfer_learning=flag_transfer_learning, built_in_test=True, data_test=data_test)
     # 预测
     if flag_infer:
         en = ['win',
