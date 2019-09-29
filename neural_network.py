@@ -312,7 +312,7 @@ class NeuralNetwork(object):
         elif self.loss_fun_type == 'mae':
             loss = tf.reduce_mean(tf.abs(tf.subtract(y_true, y_infer)))
         elif self.loss_fun_type == 'cross_entropy':
-            # todo
+            y_true = tf.reshape(tf.one_hot(indices=y_true, depth=self.label_num), [-1, self.label_num])
             loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=y_infer, labels=y_true))
         elif self.loss_fun_type == 'cross_entropy_seq2seq':
             # 目标序列真实值
@@ -366,7 +366,7 @@ class NeuralNetwork(object):
         if not score_type:
             score_type = self.eval_score_type
         
-        if score_type in ['precision', 'recall', 'accuracy', 'f1_score']:
+        if score_type in ['precision', 'recall', 'f1_score']:
             # 若任务是2分类问题，则需要将2维的onehot形式预测值转换为1维
             y_true = tf.cast(tf.argmax(y_true, axis=1), tf.int32)
             y_infer = tf.cast(tf.argmax(y_infer, axis=1), tf.int32)
@@ -422,6 +422,11 @@ class NeuralNetwork(object):
                 return tf.reduce_mean(tf.square(tf.subtract(y_true, y_infer)))
             elif score_type == 'mae':
                 return tf.reduce_mean(tf.abs(tf.subtract(y_true, y_infer)))
+            elif score_type == 'accuracy':
+                y_infer_idx = tf.reshape(tf.argmax(y_infer, axis=1, output_type=tf.int32), [-1, 1])
+                count_correct = tf.reduce_sum(tf.cast(tf.equal(y_infer_idx, y_true), tf.float32))
+                count_all = tf.reduce_sum(tf.cast(tf.add(tf.multiply(y_true, 0), 1), tf.float32))
+                return count_correct/count_all
 
     # early_stop判定
     def early_stop_judge(self, new_score, early_stop_scores, early_stop_rounds):
@@ -457,6 +462,7 @@ class NeuralNetwork(object):
     '''========================================================================'''
     '''===============================model part==============================='''
     '''========================================================================'''
+    # todo 添加新模型时，需要在creat_mode和get_feed_dict上添加相应的分支
     # 构建模型
     def creat_model(self):
         # 记录各层神经网络的输出
