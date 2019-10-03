@@ -18,6 +18,7 @@ import logging
 from sklearn.model_selection import train_test_split
 import copy
 import pickle
+from imp import reload
 
 logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S",)
 
@@ -34,20 +35,23 @@ import nn_lib
 flag_test = False
 flag_build_vocab = False
 flag_process_data = False
-flag_train = True
-flag_infer = True
+flag_pretrain_w2v = True
+flag_train = False
+flag_infer = False
 flag_transfer_learning = False
 
 
 # 超参数
-word_embd_dim = 200
+word_embd_dim = 100
 dim_rnn = word_embd_dim
 learning_rate = 1e-3
 batch_size = 128*1
 keep_prob = 0.95
+encoder_word_embd_pretrain = None
+decoder_word_embd_pretrain = None
 
 path_seq2seq = path_data+u'seq2seq_nmt\\'
-path_corpus_processed = path_data + u'seq2seq_nmt\\corpus_processed\\'
+path_corpus_processed = path_seq2seq + u'corpus_processed\\'
 processed_corpus_names = ['x_train', 'x_test', 'x_vali', 'x_extended_train', 'x_extended_test', 'x_extended_vali',
                           'y_train', 'y_test', 'y_vali', 'y_extended_train', 'y_extended_test', 'y_extended_vali',
                           'vocab_extend_train', 'vocab_extend_test', 'vocab_extend_vali']
@@ -220,6 +224,17 @@ if __name__ == "__main__":
     # 预处理数据
     if flag_process_data is True:
         preprocess_data()
+    # 预训练词向量
+    if flag_pretrain_w2v is True:
+        nn_lib.train_word2vec(path_corpus=path_corpus_src, word2vec_dim=word_embd_dim,
+                              path_w2v_model=path_seq2seq+'en_w2v_model', path_w2v_vector=path_seq2seq+'en_w2v_vector')
+        w2v_vector = nn_lib.load_w2v_vector(path_seq2seq+'en_w2v_vector')
+        word2id_vocab_src, vocab_size_src = nn_lib.read_word2id_dict(path_vocab_src)
+        encoder_word_embd_pretrain = nn_lib.rebuild_w2v_matrix(word2id_vocab_src, w2v_vector)
+        with open(path_seq2seq + 'encoder_word_embd_pretrain', 'wb') as file:
+            pickle.dump(encoder_word_embd_pretrain, file)
+        # word2id_vocab_tgt, vocab_size_tgt = nn_lib.read_word2id_dict(path_vocab_tgt)
+
     corpus = load_processed_corpus()
     data = [corpus['x_train'], corpus['x_extended_train'], corpus['vocab_extend_train'], corpus['y_train'], corpus['y_extended_train']]
     data_test = [corpus['x_test'], corpus['x_extended_test'], corpus['vocab_extend_test'], corpus['y_test'], corpus['y_extended_test']]
@@ -229,9 +244,9 @@ if __name__ == "__main__":
                                            'word_embd_dim': word_embd_dim,
                                            'dim_rnn': dim_rnn,
                                            'use_same_word_embd': False,
-                                           'encoder_word_embd_pretrain': None,
+                                           'encoder_word_embd_pretrain': encoder_word_embd_pretrain,
                                            'encoder_vocab_size': vocab_size_src,
-                                           'decoder_word_embd_pretrain': None,
+                                           'decoder_word_embd_pretrain': decoder_word_embd_pretrain,
                                            'decoder_vocab_size': vocab_size_tgt,
                                            'target_seq_len_max': tgt_seq_len_max,
                                            'batch_size': batch_size},
@@ -241,7 +256,7 @@ if __name__ == "__main__":
                                            'early_stop_rounds_train': 100,
                                            'built_in_test_interval': 1,
                                            'early_stop_rounds_test': 10},
-                          other_parameter={'model_save_rounds': 10,
+                          other_parameter={'model_save_rounds': 1,
                                            'path_data': path_seq2seq}
                           )
     # 训练
@@ -249,11 +264,29 @@ if __name__ == "__main__":
         model.train(transfer_learning=flag_transfer_learning, built_in_test=True, data_test=data_test)
     # 预测
     if flag_infer:
-        en = ['win',
-              'go']
-        zh = nmt(model=model, corpus_src=en)
-        for sent in zh:
-            print(sent)
+        if True:
+            word2id_vocab_src, vocab_size_src = nn_lib.read_word2id_dict(path_vocab_src)
+            id2word_vocab_src = {id: word for word,id in word2id_vocab_src.items()}
+            en = []
+            for sent in data[0]:
+                sent_tmp = [id2word_vocab_src[id] for id in sent if (id != 0 and id != 2)]
+                sent_tmp = ' '.join(sent_tmp)
+                en.append(sent_tmp)
+            zh = nmt(model=model, corpus_src=en)
+            nmt_result = []
+            for i in range(len(en)):
+                nmt_result.append((en[i], zh[i]))
+        if True:
+            src = ['win',
+                  'go']
+            src = [sent.lower() for sent in src]
+            tgt = nmt(model=model, corpus_src=src)
+            for sent in tgt:
+                print(sent)
+
+    # 输出模型参数
+    if False:
+        model.params_output()
 
     print('Task End.')
 

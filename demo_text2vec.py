@@ -29,6 +29,7 @@ flag_test = False
 维基百科语料下载地址：
 https://dumps.wikimedia.org/zhwiki/latest/zhwiki-latest-pages-articles.xml.bz2
 '''
+
 #word2vec算法相关参数
 w2v_dim = 100
 w2v_window = 10
@@ -71,7 +72,7 @@ def load_wiki_corpus(path_data_in=None, path_data_out=None, word2vec=True):
             corpus_processed_path = path_nlp+'corpus_doc2vec.txt'
     else:
         corpus_processed_path = path_data_out
-    cc=OpenCC('t2s')
+    cc = OpenCC('t2s')
     count = 0
     with open(corpus_processed_path, 'w', encoding='utf-8') as corpus_processed:
         corpus=WikiCorpus(corpus_path, lemmatize=False, dictionary={})

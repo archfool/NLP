@@ -16,10 +16,10 @@ import traceback
 
 
 word2id_list_const = {
-    '<PAD>': 0,
-    '<SOS>': 1,
-    '<EOS>': 2,
-    '<UNK>': 3
+    '<pad>': 0,
+    '<sos>': 1,
+    '<eos>': 2,
+    '<unk>': 3
 }
 
 # 加载停用词表
@@ -62,11 +62,12 @@ def build_word2id_vocab(data, saved_path, vocab_size=None, use_seg=False,
         else:
             sentence = list(sentence)
         for word in sentence:
+            word = word.lower()
             #替换特定领域的词汇为类型名
             if (False == retain_digit) and word.isdigit():
-                word = '<NUM>'
+                word = '<num>'
             elif (False==retain_eng) and (('\u0041' <= word <='\u005a') or ('\u0061' <= word <='\u007a')):
-                word = '<ENG>'
+                word = '<eng>'
             #生成字典
             if word not in word2id:
                 word2id[word] = 1
@@ -87,7 +88,7 @@ def read_word2id_dict(path):
     with open(path, 'rb') as f:
         word2id = pickle.load(f)
     vocab_size = len(word2id)
-    return word2id,vocab_size
+    return word2id, vocab_size
 
 
 # 将句子转化为ID序列
@@ -99,11 +100,12 @@ def sentence2id(sent, word2id_vocab, add_eos=True, reverse=False,
     sentence_id_extended = []
     vocab_size = len(word2id_vocab)
     for word in sent:
+        word = word.lower()
         # 判断是否转换数字和英文字母
         if (False == retain_digit) and word.isdigit():
-            word = '<NUM>'
+            word = '<num>'
         elif (False == retain_eng) and (('\u0041' <= word <= '\u005a') or ('\u0061' <= word <= '\u007a')):
-            word = '<ENG>'
+            word = '<eng>'
         # 判断是否为OOV词
         if word in word2id_vocab:
             # 使用扩展词表
@@ -118,7 +120,7 @@ def sentence2id(sent, word2id_vocab, add_eos=True, reverse=False,
                     vocab_extend[word] = len(vocab_extend)+vocab_size
                 word_id_extend = vocab_extend[word]
             # 不使用扩展词表
-            word = '<UNK>'
+            word = '<unk>'
             word_id = word2id_vocab[word]
         # 将得到的id添加到list
         # 使用扩展词表
@@ -134,15 +136,15 @@ def sentence2id(sent, word2id_vocab, add_eos=True, reverse=False,
             sentence_id = sentence_id[::-1]
             sentence_id_extended = sentence_id_extended[::-1]
         if add_eos is True:
-            sentence_id.append(word2id_list_const['<EOS>'])
-            sentence_id_extended.append(word2id_list_const['<EOS>'])
+            sentence_id.append(word2id_list_const['<eos>'])
+            sentence_id_extended.append(word2id_list_const['<eos>'])
         return sentence_id, sentence_id_extended, vocab_extend
     # 不使用扩展词表
     else:
         if reverse is True:
             sentence_id = sentence_id[::-1]
         if add_eos is True:
-            sentence_id.append(word2id_list_const['<EOS>'])
+            sentence_id.append(word2id_list_const['<eos>'])
         return sentence_id
 
 
@@ -162,9 +164,9 @@ def pad_sequences(sequences, max_seq_len, add_sos=False, pad_mark=0):
     for seq in sequences:
         seq = list(seq)
         seq_ = seq[:max_len] + [pad_mark] * max(max_len - len(seq), 0)
-        # seq_[-1] = word2id_list_const['<EOS>'] if seq_[-1] != 0 else 0
+        # seq_[-1] = word2id_list_const['<eos>'] if seq_[-1] != 0 else 0
         if add_sos is True:
-            seq_list.append([word2id_list_const['<SOS>']]+seq_)
+            seq_list.append([word2id_list_const['<sos>']]+seq_)
         else:
             seq_list.append(seq_)
         # seq_len_list.append(min(len(seq), max_len))

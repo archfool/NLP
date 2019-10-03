@@ -46,7 +46,7 @@ batch_size = 2048
 keep_prob = 0.8
 
 path_ner = path_data + u'ner\\'
-path_corpus_processed = path_data + u'ner\\corpus_processed\\'
+path_corpus_processed = path_ner + u'corpus_processed\\'
 processed_corpus_names = ['x_train', 'x_test', 'x_vali',
                           'y_train', 'y_test', 'y_vali']
 ##NER labels, BIO

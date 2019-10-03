@@ -278,12 +278,18 @@ def attention_mechanism(decoder_num_units, memory, memory_seq_len, decoder_state
 
         # memory_expand: [batch_size, step_len, 1, dim_rnn*2]
         memory_expand = tf.expand_dims(memory, axis=2)
-        memory_w_init = tf.truncated_normal(shape=[1, 1, dim_bi_rnn, dim_rnn],
+        # todo delete old
+        # memory_w_init = tf.truncated_normal(shape=[1, 1, dim_bi_rnn, dim_rnn],
+        #                                     stddev=math.sqrt(6 / (dim_bi_rnn + dim_rnn)),
+        #                                     dtype=tf.float32)
+        # memory_w = tf.get_variable(name='memory_w', trainable=True, initializer=memory_w_init)
+        memory_w_init = tf.truncated_normal(shape=[dim_bi_rnn, dim_rnn],
                                             stddev=math.sqrt(6 / (dim_bi_rnn + dim_rnn)),
                                             dtype=tf.float32)
         memory_w = tf.get_variable(name='memory_w', trainable=True, initializer=memory_w_init)
+        memory_w_expanded = tf.expand_dims(tf.expand_dims(memory_w, 0), 0)
         # encoder_feature: [batch_size, step_len, 1, dim_rnn]
-        encoder_feature = nn_ops.conv2d(memory_expand, memory_w, [1, 1, 1, 1], "SAME")
+        encoder_feature = nn_ops.conv2d(memory_expand, memory_w_expanded, [1, 1, 1, 1], "SAME")
     with tf.variable_scope('decoder_feature'):
         # w_dec_state = tf.get_variable(name="w_dec_state", trainable=True, shape=[total_arg_size, output_size])
         # decoder_feature_raw: [batch_size, dim_rnn]

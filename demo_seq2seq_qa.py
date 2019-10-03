@@ -41,8 +41,8 @@ max_seq_len = 30
 keep_prob = 0.95
 
 path_seq2seq = path_data + u'seq2seq_qa\\'
-path_corpus = path_data + u'seq2seq_qa\\corpus\\'
-path_corpus_processed = path_data + u'seq2seq_qa\\corpus_processed\\'
+path_corpus = path_seq2seq + u'corpus\\'
+path_corpus_processed = path_seq2seq + u'corpus_processed\\'
 corpus_list = ['qingyun.tsv'] if flag_test else ['qingyun.tsv', 'chatterbot.tsv', 'ptt.tsv']
 # corpus_list = ['qingyun.tsv'] if flag_test else ['qingyun.tsv', 'chatterbot.tsv', 'ptt.tsv', 'weibo.tsv']
 # 源序列词库相关参数

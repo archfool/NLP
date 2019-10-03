@@ -629,11 +629,15 @@ class NeuralNetwork(object):
     #         tf.global_variables()
     #         sess=tf.InteractiveSession()
     #         sess.run(tf.global_variables_initializer())
+            # 判断待存储参数的文件夹是否存在，若不存在，则新建一个。
+            if not os.path.exists(self.path_data + 'model_paras\\'):
+                os.makedirs(self.path_data + 'model_paras\\')
+            # 遍历模型参数并存储到csv文件里
             for var in tf.global_variables():
                 print(var)
                 var_value = sess.run(var)
                 var_name = var.name.replace(':', '_').replace(r'/', '_')
-                dataframe(var_value).to_csv(self.path_data+u'{}.csv'.format(var_name), sep=',', encoding='utf_8_sig')
+                dataframe(var_value).to_csv(self.path_data+u'model_paras\\{}.csv'.format(var_name), sep=',', encoding='utf_8_sig')
         #     w_1=tf.get_default_graph().get_tensor_by_name('w:0')
         #     w_1=dataframe(w_1.eval())
         #     w_1.to_csv('.\para_output'+u'\\w_1'+u'.csv',sep=',',encoding='utf_8_sig')
