@@ -58,7 +58,8 @@ def simlarityCalu(vector1, vector2):
 # 读取和处理语料
 def preprocess_wiki_corpus(path_data_in=None, path_data_out=None):
     if path_data_in == None:
-        corpus_path = path_wiki + u'zhwiki-latest-pages-articles.xml.bz2'
+        # corpus_path = path_wiki + u'zhwiki-latest-pages-articles.xml.bz2'
+        corpus_path = path_wiki + u'enwiki-latest-pages-articles.xml.bz2'
     else:
         corpus_path = path_data_in
     if path_data_out == None:
@@ -147,10 +148,10 @@ def w2v_demo(model):
 
 
 if __name__ == '__main__':
-    flag_test = True
+    flag_test = False
     preprocess_wiki_corpus()
-    model = train_word2vec()
-    w2v_vector = load_w2v_vector(path_wiki + r'wiki_zh_w2v_vector'+'_{}'.format(w2v_dim))
+    # model = train_word2vec()
+    # w2v_vector = load_w2v_vector(path_wiki + r'wiki_zh_w2v_vector'+'_{}'.format(w2v_dim))
     print('End Task !')
 
 

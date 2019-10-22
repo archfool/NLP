@@ -31,6 +31,13 @@ def get_stopwords(path_data=None):
     stopwords = [word.replace('\n', '') for word in open(stopword_path,encoding='utf-8').readlines()]
     return stopwords
 
+def str_segment_init(add_words=None, stop_words=None):
+    if (add_words is not None) and isinstance(add_words, (list, tuple)):
+        for add_word in add_words:
+            # print(add_word)
+            jieba.add_word(add_word)
+    return
+
 # 分词
 def str_segment(sentence, pos=False):
     sentence = sentence.strip()

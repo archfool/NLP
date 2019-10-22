@@ -15,7 +15,7 @@ from tensorflow.python.ops import math_ops
 import nn_lib
 
 
-def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
+def seq2seq(train_or_infer, x_id, y_id, keep_prob, batch_size,
             x_id_extended, y_id_extended, vocab_size_extend,
             word_embd_dim, dim_rnn, use_same_word_embd=False,
             encoder_word_embd_pretrain=None, encoder_vocab_size=None,
@@ -132,24 +132,30 @@ def seq2seq(x_id, y_id, keep_prob, train_or_infer, batch_size,
 
         decoder.append(final_distributions)
     # todo 引入非线性
-    return encoder, decoder
+    if 'train' == train_or_infer:
+        return encoder+decoder
+    else:
+        return tf.concat([tf.expand_dims(step_output, axis=1) for step_output in decoder[-1]], axis=1)
+
 
 
 # built word embedding
-def creat_word_embd(word_embd_pretrain=None, vocab_size=None, word_embd_dim=None, name='word_embd_matrix'):
+def creat_word_embd(word_embd_pretrain=None, vocab_size=0, word_embd_dim=None, name='word_embd_matrix'):
     # word_embd:[batch_size,step_len,embd_dim]
-    if word_embd_pretrain is not None:
+    try:
+        tf.assert_type(word_embd_pretrain, tf.float32)
         word_embd = tf.get_variable(name=name, trainable=True, initializer=word_embd_pretrain)
         vocab_size = word_embd.shape[0].value
         word_embd_dim = word_embd.shape[1].value
-    elif (word_embd_pretrain is None) and ((vocab_size is None) or (word_embd_dim is None)):
-        print("get_word_embd para error!!!")
-        return
-    else:
-        # 在word_embd_pretrain==[]时，需要根据词表大小vocab_size和词向量维度word_embd_dim，建立嵌入词向量word2vec
-        initializer = tf.random_uniform(shape=(vocab_size, word_embd_dim), minval=-1, maxval=1, dtype=tf.float32)
-        # initializer = tf.truncated_normal(shape=(vocab_size, word_embd_dim), mean=0.0, stddev=1.0, dtype=tf.float32)
-        word_embd = tf.get_variable(name=name, trainable=True, initializer=initializer)
+    except:
+        if (0 == vocab_size) or (word_embd_dim is None):
+            print("get_word_embd para error!!!")
+            return
+        else:
+            # 在word_embd_pretrain==[]时，需要根据词表大小vocab_size和词向量维度word_embd_dim，建立嵌入词向量word2vec
+            initializer = tf.random_uniform(shape=(vocab_size, word_embd_dim), minval=-1, maxval=1, dtype=tf.float32)
+            # initializer = tf.truncated_normal(shape=(vocab_size, word_embd_dim), mean=0.0, stddev=1.0, dtype=tf.float32)
+            word_embd = tf.get_variable(name=name, trainable=True, initializer=initializer)
     return word_embd, vocab_size, word_embd_dim
 
 

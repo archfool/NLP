@@ -35,17 +35,19 @@ import nn_lib
 flag_test = False
 flag_build_vocab = False
 flag_process_data = False
-flag_pretrain_w2v = True
+flag_pretrain_w2v = False
 flag_train = False
 flag_infer = False
 flag_transfer_learning = False
+flag_params_output = False
+flag_export_model = True
 
 
 # 超参数
 word_embd_dim = 100
 dim_rnn = word_embd_dim
 learning_rate = 1e-3
-batch_size = 128*1
+batch_size = 16*1
 keep_prob = 0.95
 encoder_word_embd_pretrain = None
 decoder_word_embd_pretrain = None
@@ -244,9 +246,9 @@ if __name__ == "__main__":
                                            'word_embd_dim': word_embd_dim,
                                            'dim_rnn': dim_rnn,
                                            'use_same_word_embd': False,
-                                           'encoder_word_embd_pretrain': encoder_word_embd_pretrain,
+                                           # 'encoder_word_embd_pretrain': encoder_word_embd_pretrain,
                                            'encoder_vocab_size': vocab_size_src,
-                                           'decoder_word_embd_pretrain': decoder_word_embd_pretrain,
+                                           # 'decoder_word_embd_pretrain': decoder_word_embd_pretrain,
                                            'decoder_vocab_size': vocab_size_tgt,
                                            'target_seq_len_max': tgt_seq_len_max,
                                            'batch_size': batch_size},
@@ -264,7 +266,7 @@ if __name__ == "__main__":
         model.train(transfer_learning=flag_transfer_learning, built_in_test=True, data_test=data_test)
     # 预测
     if flag_infer:
-        if True:
+        if False:
             word2id_vocab_src, vocab_size_src = nn_lib.read_word2id_dict(path_vocab_src)
             id2word_vocab_src = {id: word for word,id in word2id_vocab_src.items()}
             en = []
@@ -285,8 +287,12 @@ if __name__ == "__main__":
                 print(sent)
 
     # 输出模型参数
-    if False:
+    if flag_params_output:
         model.params_output()
+
+    # 输出pb模型
+    if flag_export_model:
+        model.export_model()
 
     print('Task End.')
 

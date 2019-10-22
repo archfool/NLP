@@ -16,7 +16,10 @@ import nn_lib
 
 
 # BiLSTM_CRF模型
-def bilstm_crf(x, keep_prob, dim_rnn, label_num, seq_len_max, word_embd_pretrain=None, vocab_size=None, word_embd_dim=None):
+def bilstm_crf(train_or_infer, x, keep_prob,
+               dim_rnn, label_num, seq_len_max,
+               word_embd_pretrain=None, vocab_size=None,
+               word_embd_dim=None):
     with tf.variable_scope('bilstm_layer'):
         # layer[0] 输入数据，已onehot，未embedding
         # x:[batch_size,seq_len_max]

@@ -143,7 +143,7 @@ class NeuralNetwork(object):
             score_test = self.cal_eval_score(y_true=self.y_ph, y_infer=self.model_out, score_type=self.eval_score_type)
 
         # 初始化模型存取器
-        saver = tf.train.Saver(max_to_keep=10)
+        saver = tf.train.Saver(max_to_keep=10, save_relative_paths=True)
         if not os.path.exists(self.path_data+'model_save\\'):
             os.makedirs(self.path_data+'model_save\\')
         
@@ -518,9 +518,14 @@ class NeuralNetwork(object):
             self.x_ph = tf.placeholder('int32', [None, None], name='x')
             self.y_ph = tf.placeholder('int32', [None, None], name='y')
             self.seq_len_max_ph = tf.placeholder('int32', name='seq_len_max')
+            # 模型入参汇总
+            self.params_inputs = [self.x_ph, self.keep_prob_ph,
+                                  self.dim_rnn, self.label_num, self.seq_len_max_ph,
+                                  self.word_embd_pretrain, self.vocab_num,
+                                  self.word_embd_dim]
             # 构建模型
             self.layer_output, self.seq_len, self.transition_score_matrix = nn_model.bilstm_crf(
-                self.x_ph, self.keep_prob_ph,
+                self.train_or_infer_ph, self.x_ph, self.keep_prob_ph,
                 self.dim_rnn, self.label_num, self.seq_len_max_ph,
                 self.word_embd_pretrain, self.vocab_num,
                 self.word_embd_dim
@@ -529,10 +534,10 @@ class NeuralNetwork(object):
             self.word_embd_dim = self.model_parameter.get('word_embd_dim', 300)
             self.dim_rnn = self.model_parameter.get('dim_rnn', 300)
             self.use_same_word_embd = self.model_parameter.get('use_same_word_embd', True)
-            self.encoder_word_embd_pretrain = self.model_parameter.get('encoder_word_embd_pretrain', None)
-            self.encoder_vocab_size = self.model_parameter.get('encoder_vocab_size', None)
-            self.decoder_word_embd_pretrain = self.model_parameter.get('decoder_word_embd_pretrain', None)
-            self.decoder_vocab_size = self.model_parameter.get('decoder_vocab_size', None)
+            self.encoder_vocab_size = self.model_parameter.get('encoder_vocab_size', 0)
+            self.encoder_word_embd_pretrain = self.model_parameter.get('encoder_word_embd_pretrain', tf.zeros([self.encoder_vocab_size, self.word_embd_dim], tf.int32))
+            self.decoder_vocab_size = self.model_parameter.get('decoder_vocab_size', 0)
+            self.decoder_word_embd_pretrain = self.model_parameter.get('decoder_word_embd_pretrain', tf.zeros([self.decoder_vocab_size, self.word_embd_dim], tf.int32))
             self.target_seq_len_max = self.model_parameter.get('target_seq_len_max', 50)
             # 配置placeholder
             self.x_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x')
@@ -541,15 +546,34 @@ class NeuralNetwork(object):
             self.x_extended_ph = tf.placeholder('int32', [None, self.data_dim[0]], name='x_extended')
             self.y_extended_ph = tf.placeholder('int32', [None, self.data_dim[3]], name='y_extended')
             self.vocab_size_extend_ph = tf.placeholder('int32', name='vocab_size_extend')
+            # 模型入参出参映射
+            self.inputs_map = {
+                'train_or_infer': self.train_or_infer_ph, 'x_id': self.x_ph, 'y_id': self.y_ph,
+                'keep_prob': self.keep_prob_ph, 'batch_size': self.batch_size_ph,
+                'x_id_extended': self.x_extended_ph, 'y_id_extended': self.y_extended_ph,
+                'vocab_size_extend': self.vocab_size_extend_ph,
+                'word_embd_dim': tf.constant(self.word_embd_dim), 'dim_rnn': tf.constant(self.dim_rnn),
+                'use_same_word_embd': tf.constant(self.use_same_word_embd),
+                'encoder_word_embd_pretrain': self.encoder_word_embd_pretrain,
+                'encoder_vocab_size': tf.constant(self.encoder_vocab_size),
+                'decoder_word_embd_pretrain': self.decoder_word_embd_pretrain,
+                'decoder_vocab_size': tf.constant(self.decoder_vocab_size),
+                'target_seq_len_max': tf.constant(self.target_seq_len_max)
+            }
+            self.outputs_map = {
+                'output': tf.placeholder('float32', [None, self.target_seq_len_max, None], name='output')
+            }
             # 构建模型
-            self.encoder, self.decoder = nn_model.seq2seq(
-                self.x_ph, self.y_ph, self.keep_prob_ph, self.train_or_infer_ph, self.batch_size_ph,
+            # self.encoder, self.decoder = nn_model.seq2seq(
+            output = nn_model.seq2seq(
+                self.train_or_infer_ph, self.x_ph, self.y_ph, self.keep_prob_ph, self.batch_size_ph,
                 self.x_extended_ph, self.y_extended_ph, self.vocab_size_extend_ph,
                 self.word_embd_dim, self.dim_rnn, self.use_same_word_embd,
                 self.encoder_word_embd_pretrain, self.encoder_vocab_size,
                 self.decoder_word_embd_pretrain, self.decoder_vocab_size,
                 self.target_seq_len_max)
-            self.layer_output = self.encoder + self.decoder
+            # self.layer_output = self.encoder + self.decoder
+            return output
         elif self.model_type == 'fm':
             # 确定隐层向量维度
             self.dim_lv = self.model_parameter.get('lantent_vector_dim', self.data[0].shape[1])
@@ -616,6 +640,94 @@ class NeuralNetwork(object):
     '''========================================================================'''
     '''===============================other part==============================='''
     '''========================================================================'''
+    # 导出用于tf-serving的模型架构的ProtocolBuffer文件
+    def export_model(self):
+        tf.reset_default_graph()
+        self.creat_model()
+        model_path = tf.train.latest_checkpoint(self.path_data+'model_save\\')
+        saver = tf.train.Saver()
+        with tf.Session() as sess:
+            # 读取模型参数
+            saver.restore(sess, model_path)
+            # 创建模型输出builder
+            path_model_export = self.path_data + 'tf_serving_model'
+            if os.path.exists(path_model_export):
+                # os.remove(path_model_export)
+                os.removedirs(path_model_export)
+            builder = tf.saved_model.builder.SavedModelBuilder(path_model_export)
+            # 定义输入、输出、方法名
+            inputs = {key: tf.saved_model.utils.build_tensor_info(value) for key, value in self.inputs_map.items()}
+            outputs = {key: tf.saved_model.utils.build_tensor_info(value) for key, value in self.outputs_map.items()}
+            model_signature = tf.saved_model.signature_def_utils.build_signature_def(
+                inputs=inputs,
+                outputs=outputs,
+                method_name=tf.saved_model.signature_constants.PREDICT_METHOD_NAME
+            )
+            # 张量图通过sess输入，张量通过model_signature_def_map输入
+            builder.add_meta_graph_and_variables(
+                sess=sess,
+                # tags可以定义为任意字符串
+                tags=[tf.saved_model.tag_constants.SERVING],
+                # todo judge how can clear_devices work
+                clear_devices=True,
+                signature_def_map={
+                    # todo choice which one? 好像可以任意定义，也有看到定义为predict的
+                    # "predict_image": model_signature
+                    tf.saved_model.signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY: model_signature
+                }
+            )
+            builder.save(as_text=True)
+
+        if False:
+            # 转化tensor到模型支持的格式tensor_info，下面的reshape是因为只想输出单个结果数组，否则是二维的
+            tensor_info_x = tf.saved_model.utils.build_tensor_info(x)
+            tensor_info_pro = tf.saved_model.utils.build_tensor_info(tf.reshape(values, [1]))
+            tensor_info_classify = tf.saved_model.utils.build_tensor_info(tf.reshape(indices, [1]))
+            # 定义方法名和输入输出
+            signature_def_map = {
+                "predict_image": tf.saved_model.signature_def_utils.build_signature_def(
+                    inputs={"image": tensor_info_x},
+                    outputs={
+                        "pro": tensor_info_pro,
+                        "classify": tensor_info_classify
+                    },
+                    method_name=tf.saved_model.signature_constants.PREDICT_METHOD_NAME
+                )}
+            builder.add_meta_graph_and_variables(sess,
+                                                 [tf.saved_model.tag_constants.SERVING],
+                                                 signature_def_map=signature_def_map)
+            builder.save()
+        if False:
+            from tensorflow.python.saved_model import (
+                signature_constants, signature_def_utils, tag_constants, utils)
+            model_path = "model"
+            model_version = 1
+            model_signature = signature_def_utils.build_signature_def(
+                inputs={
+                    "keys": utils.build_tensor_info(keys_placeholder),
+                    "features": utils.build_tensor_info(inference_features)
+                },
+                outputs={
+                    "keys": utils.build_tensor_info(keys_identity),
+                    "prediction": utils.build_tensor_info(inference_op),
+                    "softmax": utils.build_tensor_info(inference_softmax),
+                },
+                method_name=signature_constants.PREDICT_METHOD_NAME)
+            export_path = os.path.join(compat.as_bytes(model_path), compat.as_bytes(str(model_version)))
+            legacy_init_op = tf.group(tf.tables_initializer(), name='legacy_init_op')
+
+            builder = saved_model_builder.SavedModelBuilder(export_path)
+            builder.add_meta_graph_and_variables(
+                sess, [tag_constants.SERVING],
+                clear_devices=True,
+                signature_def_map={
+                    signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY:
+                        model_signature,
+                },
+                legacy_init_op=legacy_init_op)
+            builder.save()
+        return
+
     # 导数神经网络参数
     def params_output(self):
         tf.reset_default_graph()
