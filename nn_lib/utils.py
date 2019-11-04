@@ -52,7 +52,7 @@ def str_segment(sentence, pos=False):
 
 
 # 建立带有词频的词表
-def build_word2id_vocab(data, saved_path, vocab_size=None, use_seg=False,
+def build_word2id_vocab(data, saved_path, vocab_size=None, use_seg=False, reserved_words=[],
                         language='chs', retain_eng=True, retain_digit=True):
     #若词表数量参数为空，则根据语言类型，配置缺省值
     if None==vocab_size:
@@ -82,11 +82,13 @@ def build_word2id_vocab(data, saved_path, vocab_size=None, use_seg=False,
             else:
                 word2id[word] += 1
     #根据词表大小，筛选出高频词
-    word2id_list = sorted(word2id.items(), key=lambda word2id: word2id[1], reverse=True)[:vocab_size-len(word2id_list_const)]
+    word2id_list = sorted(word2id.items(), key=lambda word2id: word2id[1], reverse=True)\
+        [:vocab_size-len(word2id_list_const)-len([word for word in reserved_words if word not in word2id_list_const.keys()])]
     #加上保留符号
-    word2id_list = [tag for tag in word2id_list_const.keys()]+[word for word,word_freq in word2id_list]
+    word2id_list = [tag for tag in word2id_list_const.keys()]+reserved_words+\
+                   [word for word, word_freq in word2id_list if word not in reserved_words]
     #将词表由列表格式转换为字典格式
-    word2id = {word:id for word,id in zip(word2id_list, range(len(word2id_list)))}
+    word2id = {word: id for word, id in zip(word2id_list, range(len(word2id_list)))}
     with open(saved_path, 'wb') as file:
         pickle.dump(word2id, file)
     return word2id, len(word2id)
