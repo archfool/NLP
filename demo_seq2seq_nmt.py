@@ -54,9 +54,10 @@ decoder_word_embd_pretrain = None
 
 path_seq2seq = path_data+u'seq2seq_nmt\\'
 path_corpus_processed = path_seq2seq + u'corpus_processed\\'
-processed_corpus_names = ['x_train', 'x_test', 'x_vali', 'x_extended_train', 'x_extended_test', 'x_extended_vali',
-                          'y_train', 'y_test', 'y_vali', 'y_extended_train', 'y_extended_test', 'y_extended_vali',
-                          'vocab_extend_train', 'vocab_extend_test', 'vocab_extend_vali']
+corpus_names = ['x', 'x_extended', 'y', 'y_extended', 'vocab_extend']
+# processed_corpus_names = ['x_train', 'x_test', 'x_vali', 'x_extended_train', 'x_extended_test', 'x_extended_vali',
+#                           'y_train', 'y_test', 'y_vali', 'y_extended_train', 'y_extended_test', 'y_extended_vali',
+#                           'vocab_extend_train', 'vocab_extend_test', 'vocab_extend_vali']
 
 # 源序列词库相关参数
 vocab_size_src = 8000
@@ -145,22 +146,29 @@ def preprocess_data():
     tgt_id_extendeds = np.array(tgt_id_extendeds)
     word2id_vocab_extends = np.array(word2id_vocab_extends).reshape([-1, 1])
     # 构建训练集、测试集、验证集
-    x, x_vali, x_extended, x_extended_vali, y, y_vali, y_extended, y_extended_vali, vocab_extend, vocab_extend_vali \
-        = train_test_split(src_ids, src_id_extendeds, tgt_ids, tgt_id_extendeds, word2id_vocab_extends, test_size=128*3)
-    x_train, x_test, x_extended_train, x_extended_test, y_train, y_test, y_extended_train, y_extended_test, vocab_extend_train, vocab_extend_test \
-        = train_test_split(x, x_extended, y, y_extended, vocab_extend, test_size=128*2)
-    del x, x_extended, y, y_extended, vocab_extend
-    # 存储训练集、测试集、验证集
-    for name in processed_corpus_names:
-        with open(path_corpus_processed + name, 'wb') as file:
-            pickle.dump(eval(name), file)
+    nn_lib.generate_train_test_vali(src_ids, src_id_extendeds, tgt_ids, tgt_id_extendeds, word2id_vocab_extends,
+                                    file_path=path_corpus_processed,
+                                    corpus_names=corpus_names,
+                                    data_test_size=128*2,
+                                    data_vali_size=128*3)
+    # x, x_vali, x_extended, x_extended_vali, y, y_vali, y_extended, y_extended_vali, vocab_extend, vocab_extend_vali \
+    #     = train_test_split(src_ids, src_id_extendeds, tgt_ids, tgt_id_extendeds, word2id_vocab_extends, test_size=128*3)
+    # x_train, x_test, x_extended_train, x_extended_test, y_train, y_test, y_extended_train, y_extended_test, vocab_extend_train, vocab_extend_test \
+    #     = train_test_split(x, x_extended, y, y_extended, vocab_extend, test_size=128*2)
+    # del x, x_extended, y, y_extended, vocab_extend
+    # # 存储训练集、测试集、验证集
+    # for name in processed_corpus_names:
+    #     with open(path_corpus_processed + name, 'wb') as file:
+    #         pickle.dump(eval(name), file)
     return
 
 
 # 读取语料
 def load_processed_corpus():
     corpus = {}
-    for data_name in processed_corpus_names:
+    for data_name in [name + '_train' for name in corpus_names] \
+                     + [name + '_test' for name in corpus_names] \
+                     + [name + '_vali' for name in corpus_names]:
         with open(path_corpus_processed + data_name, 'rb') as file:
             data = pickle.load(file, encoding='utf-8')
             corpus[data_name] = data

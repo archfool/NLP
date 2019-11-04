@@ -13,7 +13,8 @@ import os
 import random
 import re
 import traceback
-
+import numpy as np
+from sklearn.model_selection import train_test_split
 
 word2id_list_const = {
     '<pad>': 0,
@@ -179,6 +180,53 @@ def pad_sequences(sequences, max_seq_len, add_sos=False, pad_mark=0):
         # seq_len_list.append(min(len(seq), max_len))
     return seq_list
 
+# 划分训练集/测试集/验证集
+def generate_train_test_vali(*arrays, **options):
+    # 读取和校验参数
+    file_path = options.get('file_path', None)
+    corpus_names = options.get('corpus_names', None)
+    data_test_size = options.get('data_test_size', None)
+    data_vali_size = options.get('data_vali_size', None)
+    if ((file_path is None)
+            or (corpus_names is None)
+            or (data_test_size is None)
+            or (data_vali_size is None)):
+        print('some para is missing !!!')
+        return
+    corpus_dict = {}
+    # 划分验证集
+    result = train_test_split(*arrays, test_size=data_vali_size)
+    corpus_names_vali = [name+'_vali' for name in corpus_names]
+    result_name = []
+    for name, name_vali in zip(corpus_names, corpus_names_vali):
+        result_name.append(name)
+        result_name.append(name_vali)
+    for name, data in zip(result_name, result):
+        corpus_dict[name] = data
+    # 划分训练集和测试集
+    arrays = tuple([corpus_dict[name] for name in corpus_names])
+    result = train_test_split(*arrays, test_size=data_test_size)
+    corpus_names_train = [name+'_train' for name in corpus_names]
+    corpus_names_test = [name+'_test' for name in corpus_names]
+    result_name = []
+    for name_train, name_test in zip(corpus_names_train, corpus_names_test):
+        result_name.append(name_train)
+        result_name.append(name_test)
+    for name, data in zip(result_name, result):
+        corpus_dict[name] = data
+    # 删除原始数据
+    for name in corpus_names:
+        corpus_dict.pop(name)
+    # 存储训练集、测试集、验证集
+    for name in corpus_dict.keys():
+        with open(file_path + name, 'wb') as file:
+            pickle.dump(corpus_dict[name], file)
+    return corpus_dict
+
+
+
+
+
 
 # 提取变量名为字符串
 pattren = re.compile(r'[\W+\w+]*?get_variable_name\((\w+)\)')
@@ -192,6 +240,9 @@ def get_variable_name(x):
 
 
 if __name__=='__main__':
+    a = np.array([[1, 2], [1, 2], [1, 2], [1, 2], [1, 2]])
+    corpus_names = ['q']
+    corpus_dict = generate_train_test_vali(a, file_path=u'E:\\MachineLearning\\data\\', corpus_names=corpus_names, data_test_size=1, data_vali_size=1)
     data = []
     with open(r'..\\data\\ner\\train_data', encoding='utf-8') as f:
         lines = f.readlines()
