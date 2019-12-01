@@ -203,3 +203,4 @@ if __name__ == '__main__':
     # 导出模型参数
     if flag_output_para is True:
         model.params_output()
+    print('END')

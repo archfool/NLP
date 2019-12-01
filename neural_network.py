@@ -20,6 +20,9 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import math_ops
+# from tensorflow.summary import FileWriter
+from tensorflow.python import pywrap_tensorflow
+
 import nn_lib
 import nn_model
 
@@ -643,7 +646,7 @@ class NeuralNetwork(object):
     # 导出用于tf-serving的模型架构的ProtocolBuffer文件
     def export_model(self):
         tf.reset_default_graph()
-        self.creat_model()
+        output = self.creat_model()
         model_path = tf.train.latest_checkpoint(self.path_data+'model_save\\')
         saver = tf.train.Saver()
         with tf.Session() as sess:
@@ -657,7 +660,8 @@ class NeuralNetwork(object):
             builder = tf.saved_model.builder.SavedModelBuilder(path_model_export)
             # 定义输入、输出、方法名
             inputs = {key: tf.saved_model.utils.build_tensor_info(value) for key, value in self.inputs_map.items()}
-            outputs = {key: tf.saved_model.utils.build_tensor_info(value) for key, value in self.outputs_map.items()}
+            # outputs = {key: tf.saved_model.utils.build_tensor_info(value) for key, value in self.outputs_map.items()}
+            outputs = {'output': tf.saved_model.utils.build_tensor_info(output)}
             model_signature = tf.saved_model.signature_def_utils.build_signature_def(
                 inputs=inputs,
                 outputs=outputs,
@@ -672,8 +676,8 @@ class NeuralNetwork(object):
                 clear_devices=True,
                 signature_def_map={
                     # todo choice which one? 好像可以任意定义，也有看到定义为predict的
-                    # "predict_image": model_signature
-                    tf.saved_model.signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY: model_signature
+                    "predict_image": model_signature
+                    # tf.saved_model.signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY: model_signature
                 }
             )
             builder.save(as_text=True)
@@ -728,7 +732,7 @@ class NeuralNetwork(object):
             builder.save()
         return
 
-    # 导数神经网络参数
+    # 导出神经网络参数
     def params_output(self):
         tf.reset_default_graph()
         self.creat_model()
@@ -754,12 +758,77 @@ class NeuralNetwork(object):
         #     w_1=dataframe(w_1.eval())
         #     w_1.to_csv('.\para_output'+u'\\w_1'+u'.csv',sep=',',encoding='utf_8_sig')
         return
-   
 
+# 从ckpt文件中读取图结构
+def get_ckpt_graph(path_ckpt):
+    reader = pywrap_tensorflow.NewCheckpointReader(path_ckpt)
+    var_to_shape_map = reader.get_variable_to_shape_map()
+    len(var_to_shape_map)
+    for key in var_to_shape_map:
+        print("tensor_name: ", key)
+        # print("tensor_value: ", reader.get_tensor(key)) #相应的值
+    return var_to_shape_map
+
+# 从pb文件中读取图结构。函数有问题，还未排查。
+def get_pb_graph(path_pb):
+    with tf.gfile.FastGFile(path_pb, 'rb') as f:
+        tf.reset_default_graph()
+        graph_def = tf.GraphDef()
+        graph_def.ParseFromString(f.read())
+        tf.import_graph_def(graph_def, name='')
+    graph = tf.get_default_graph().as_graph_def()
+    nodes = []
+    for node in graph.node:
+        nodes.append(node)
+    # node_names = []
+    # for node in nodes:
+    #     node_names.append(node.name)
+
+# 读取ckpt图结构，并在tensorboard中展示出来
+def show_graph_in_tensorboard(path_ckpt_meta, path_model):
+    sess = tf.Session()
+    # step1: 加载模型的张量图结构
+    saver = tf.train.import_meta_graph(path_ckpt_meta)
+    # step2：加载模型张量图的变量数据
+    saver.restore(sess, tf.train.latest_checkpoint(path_model))
+    # 配合tensorboard进行展示
+    tf.summary.FileWriter("__tb", sess.graph)
+    "tensorboard --logdir __tb"
+    return
 
 
 if __name__ == '__main__':
+    if False:
+        get_pb_graph(u'E:\\MachineLearning\\data\\seq2seq_nmt\\tf_serving_model_notxt\\saved_model.pb')
+    if False:
+        sess = tf.Session()
+        tf.train.import_meta_graph(u'E:\\MachineLearning\\data\\seq2seq_nmt\\model_save\\mnist.ckpt-150.meta')
+        FileWriter('__tb', sess.graph)
+    if False:
+        var_to_shape_map = get_ckpt_graph(u'E:\\MachineLearning\\data\\seq2seq_nmt\\model_save\\mnist.ckpt-150')
+    if True:
+        path_data = u'E:\\MachineLearning\\data\\'
+        tf.reset_default_graph()
+        a = tf.get_variable(name='a', shape=[1, 2])
+        b = tf.get_variable(name='b', shape=[1, 2])
+        c = tf.add(a, b)
+        # d = tf.get_variable(name='d', shape=[1, 2])
+        saver = tf.train.Saver()
+        sess = tf.Session()
+        sess.run(tf.global_variables_initializer())
+        if False:
+            saver.save(sess, path_data + u'x')
+        else:
+            saver.restore(sess, tf.train.latest_checkpoint(path_data))
+        for var in tf.global_variables():
+            print(var)
+            print(sess.run(var))
+        graph = tf.get_default_graph().as_graph_def()
+        nodes = []
+        for node in graph.node:
+            nodes.append(node)
     logging.warning('end')
+
 
 
 

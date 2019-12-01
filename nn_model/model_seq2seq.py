@@ -143,7 +143,8 @@ def seq2seq(train_or_infer, x_id, y_id, keep_prob, batch_size,
 def creat_word_embd(word_embd_pretrain=None, vocab_size=0, word_embd_dim=None, name='word_embd_matrix'):
     # word_embd:[batch_size,step_len,embd_dim]
     try:
-        tf.assert_type(word_embd_pretrain, tf.float32)
+        word_embd_pretrain = tf.cast(word_embd_pretrain, dtype=tf.float32)
+        # tf.assert_type(word_embd_pretrain, tf.float32)
         word_embd = tf.get_variable(name=name, trainable=True, initializer=word_embd_pretrain)
         vocab_size = word_embd.shape[0].value
         word_embd_dim = word_embd.shape[1].value

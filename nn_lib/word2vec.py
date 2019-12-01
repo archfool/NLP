@@ -18,8 +18,10 @@ from gensim.models import Word2Vec
 from gensim.models.word2vec import LineSentence
 import multiprocessing
 import logging
+import nn_lib
 
-logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S", )
+# logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S", )
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S", )
 import codecs
 
 path_wiki = u'E:\\MachineLearning\\data\\wiki\\'
@@ -32,7 +34,7 @@ https://dumps.wikimedia.org/zhwiki/latest/zhwiki-latest-pages-articles.xml.bz2
 https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles.xml.bz2
 '''
 # word2vec算法相关参数
-w2v_dim = 100
+w2v_dim = 50
 w2v_window = 10
 # min_count参数配置过大会导致报错：you must first build vocabulary before training the model
 w2v_min_count = 3
@@ -58,8 +60,8 @@ def simlarityCalu(vector1, vector2):
 # 读取和处理语料
 def preprocess_wiki_corpus(path_data_in=None, path_data_out=None):
     if path_data_in == None:
-        # corpus_path = path_wiki + u'zhwiki-latest-pages-articles.xml.bz2'
-        corpus_path = path_wiki + u'enwiki-latest-pages-articles.xml.bz2'
+        corpus_path = path_wiki + u'zhwiki-latest-pages-articles.xml.bz2'
+        # corpus_path = path_wiki + u'enwiki-latest-pages-articles.xml.bz2'
     else:
         corpus_path = path_data_in
     if path_data_out == None:
@@ -122,6 +124,13 @@ def rebuild_w2v_matrix(word2id_vocab, w2v_vector):
             w2v_matrix[i] =w2v_vector.get_vector(id2word_vocab[i])
     return w2v_matrix
 
+def demo_rebuild_w2v_matrix(path_word2id, path_w2v):
+    path_word2id = u'E:\\MachineLearning\\data\\seq2seq_nmt\\vocab_zh.pkl'
+    path_w2v = path_wiki + u'45000-samll.txt'
+    word2id_vocab, vocab_size = nn_lib.read_word2id_dict(path_word2id)
+    w2v_vector = KeyedVectors.load_word2vec_format(path_w2v)
+    w2v_matrix = rebuild_w2v_matrix(word2id_vocab, w2v_vector)
+    return w2v_matrix
 
 # 读取腾讯词向量文件
 def load_tencent_w2v_matrix(path_data=None):
@@ -149,9 +158,10 @@ def w2v_demo(model):
 
 if __name__ == '__main__':
     flag_test = False
-    preprocess_wiki_corpus()
-    # model = train_word2vec()
+    # preprocess_wiki_corpus()
+    model = train_word2vec()
     # w2v_vector = load_w2v_vector(path_wiki + r'wiki_zh_w2v_vector'+'_{}'.format(w2v_dim))
+    # w2v_matrix = demo_rebuild_w2v_matrix(None, None)
     print('End Task !')
 
 
