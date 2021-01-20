@@ -192,6 +192,12 @@ if __name__=='__main__':
 #    generate_text2vec_model()
 #    load_wiki_corpus(word2vec=False)
 #    generate_text2vec_model(word2vec=False)
+
+    from gensim.models import Word2Vec
+    sents = []
+    for i in range(100):
+        sents.append(list('我爱机器学习我爱机器学习我爱机器学习我爱机器学习我爱机器学习我爱机器学习'))
+        model = Word2Vec(sents, size=100, window=5, min_count=5, sg=1)
     
 
 

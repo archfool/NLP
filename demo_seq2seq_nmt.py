@@ -217,7 +217,7 @@ def nmt(model, corpus_src,
     return corpus_tgt
 
 
-def test():
+def demo():
     word2id_vocab_src, vocab_size_src = nn_lib.read_word2id_dict(path_vocab_src)
     word2id_vocab_tgt, vocab_size_tgt = nn_lib.read_word2id_dict(path_vocab_tgt)
     id2word_vocab_src = {value: key for key, value in word2id_vocab_src.items()}

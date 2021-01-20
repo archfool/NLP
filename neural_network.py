@@ -20,7 +20,6 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import math_ops
-# from tensorflow.summary import FileWriter
 from tensorflow.python import pywrap_tensorflow
 
 import nn_lib
@@ -761,6 +760,10 @@ class NeuralNetwork(object):
 
 # 从ckpt文件中读取图结构
 def get_ckpt_graph(path_ckpt):
+    if True:
+        init_vars = tf.train.list_variables(path_ckpt)
+        for name, shape in init_vars:
+            print('var_name:{}\tshape:{}'.format(name, shape))
     reader = pywrap_tensorflow.NewCheckpointReader(path_ckpt)
     var_to_shape_map = reader.get_variable_to_shape_map()
     len(var_to_shape_map)
@@ -811,7 +814,7 @@ if __name__ == '__main__':
         tf.reset_default_graph()
         a = tf.get_variable(name='a', shape=[1, 2])
         b = tf.get_variable(name='b', shape=[1, 2])
-        c = tf.add(a, b)
+        c = tf.add(a, b, name='c')
         # d = tf.get_variable(name='d', shape=[1, 2])
         saver = tf.train.Saver()
         sess = tf.Session()

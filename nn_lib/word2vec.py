@@ -85,14 +85,14 @@ def preprocess_wiki_corpus(path_data_in=None, path_data_out=None):
 
 
 # 训练词向量
-def train_word2vec(path_corpus=None, word2vec_dim=w2v_dim, path_w2v_model=None, path_w2v_vector=None):
+def train_word2vec(path_corpus=None, word2vec_dim=w2v_dim, path_w2v_model=None, path_w2v_model_other=None):
     # 初始化缺省地址
     if path_corpus == None:
         path_corpus = path_wiki + r'corpus_wiki.txt'
     if path_w2v_model == None:
-        path_w2v_model = path_wiki + r'wiki_zh_w2v_model'
-    if path_w2v_vector == None:
-        path_w2v_vector = path_wiki + r'wiki_zh_w2v_vector'
+        path_w2v_model = path_wiki + r'wiki_zh_model'
+    if path_w2v_model_other == None:
+        path_w2v_model_other = path_wiki + r'wiki_zh_model_w2v'
     # 训练模型
     logging.warning('begin word2vec')
     model = Word2Vec(LineSentence(path_corpus), sg=w2v_sg, size=word2vec_dim, \
@@ -101,16 +101,22 @@ def train_word2vec(path_corpus=None, word2vec_dim=w2v_dim, path_w2v_model=None, 
                      seed=int(time.time()), workers=multiprocessing.cpu_count())
     logging.warning('end word2vec')
     # 保存模型
+    # 模式一，模型文件体积小，加载速度快
+    # todo Word2Vec和KeyedVectors的save方式的调用有点混乱，下次用到的时候再验证下
     model.save(path_w2v_model)
-    model.wv.save_word2vec_format(path_w2v_vector, binary=False)
+    # 模式二，模型文件体积大，加载速度慢
+    model.wv.save_word2vec_format(path_w2v_model_other, binary=False)
     logging.warning('saved word2vec model')
     return model
 
 
 # 读取词向量文件
-def load_w2v_vector(path_w2v_vector):
-    w2v_vector = KeyedVectors.load_word2vec_format(path_w2v_vector, binary=False)
-    return w2v_vector
+def load_w2v_model(path_w2v_model):
+    # 模式一，模型文件体积小，加载速度快
+    # w2v_model = KeyedVectors.load(path_w2v_model)
+    # 模式二，模型文件体积大，加载速度慢
+    w2v_model = KeyedVectors.load_word2vec_format(path_w2v_model, binary=False)
+    return w2v_model
 
 # 根据词表字典和词向量，构建新词表
 def rebuild_w2v_matrix(word2id_vocab, w2v_vector):
@@ -160,7 +166,7 @@ if __name__ == '__main__':
     flag_test = False
     # preprocess_wiki_corpus()
     model = train_word2vec()
-    # w2v_vector = load_w2v_vector(path_wiki + r'wiki_zh_w2v_vector'+'_{}'.format(w2v_dim))
+    # w2v_model = load_w2v_model(path_wiki + r'wiki_zh_model_w2v'+'_{}'.format(w2v_dim))
     # w2v_matrix = demo_rebuild_w2v_matrix(None, None)
     print('End Task !')
 
